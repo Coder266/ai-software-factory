@@ -5,12 +5,9 @@
   "workspaceFolder": "/workspace",
   "forwardPorts": [8080, 5432, 5173],
   "postCreateCommand": "go mod download && cd frontend && npm install",
-  // NOTE: HTTPS git push/pull is wired to the persisted `gh` token by a
-  // *system-level* git credential helper baked into the image (see the
-  // Dockerfile). That config lives in the image, not in `~/.gitconfig`, so it
-  // survives rebuilds AND is present on the `make`/raw `docker compose` path,
-  // which never runs lifecycle hooks like this one. No `postStartCommand` is
-  // needed for git auth; the one-time `gh auth login` is all a developer does.
+  // Git HTTPS auth uses a system-level `gh` credential helper baked into the
+  // image (see Dockerfile), so no `postStartCommand` is needed — just a one-time
+  // `gh auth login`.
   "remoteUser": "vscode",
   "customizations": {
     "vscode": {

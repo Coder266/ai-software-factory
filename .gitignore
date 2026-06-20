@@ -28,3 +28,6 @@ frontend/dist/
 .DS_Store
 .idea/
 *.swp
+
+# Backlog story files are local-only — never committed
+backlog/

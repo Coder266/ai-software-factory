@@ -1,11 +1,8 @@
 FROM mcr.microsoft.com/devcontainers/go:1-bookworm
 
-# psql client + the GitHub CLI (`gh`).
-# (git, curl, ripgrep are already present in the base image, but `gh` is NOT —
-# install it from GitHub's official apt repo. Doing it here, rather than via a
-# devcontainer `features` entry, means `gh` is present no matter how the
-# container is started — the `make`/raw `docker compose` path never runs
-# devcontainer features or lifecycle hooks.)
+# psql client + the GitHub CLI (`gh`, from GitHub's apt repo — not in the base
+# image, and bookworm's own repo lags). Installed in the image, not via a
+# devcontainer feature, so it's present on the `make`/raw `docker compose` path.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client \
  && mkdir -p -m 755 /etc/apt/keyrings \
@@ -41,18 +38,10 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN mkdir -p /home/vscode/.claude \
  && ln -sf /home/vscode/.claude/claude.json /home/vscode/.claude.json
 
-# Persist the GitHub CLI login in the `gh-config` named volume (mounted at
-# ~/.config/gh). `gh` is installed above from GitHub's apt repo. Pre-creating
-# the dir as the `vscode` user makes a fresh volume inherit `vscode` ownership
-# on first mount, so `gh` can write its config / hosts.yml without hitting
-# root-owned permission errors.
-#
-# Also wire HTTPS git push/pull to the persisted `gh` token by registering `gh`
-# as a git credential helper at the *system* level. Baking this into the image
-# means it is present however the container is started — including the
-# `make`/raw `docker compose` path, which never runs devcontainer lifecycle
-# hooks. `gh auth git-credential` only emits credentials once a login exists in
-# the gh-config volume, so this is inert until the one-time `gh auth login`.
+# Register `gh` as git's HTTPS credential helper at the *system* level so it's
+# present on every start path (not just devcontainer lifecycle hooks). Inert
+# until the one-time `gh auth login`. The pre-created ~/.config/gh dir gives a
+# fresh `gh-config` volume `vscode` ownership on first mount.
 USER root
 RUN git config --system credential."https://github.com".helper "" \
  && git config --system --add credential."https://github.com".helper "!gh auth git-credential" \
