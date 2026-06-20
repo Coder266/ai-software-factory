@@ -14,6 +14,13 @@ services:
       # independent of your host. Log in once inside the container and it
       # persists across restarts and rebuilds (see `make logout` to reset).
       - claude-config:/home/vscode/.claude
+      # The GitHub CLI's login + config live here, in their own named volume
+      # (mirroring the Claude pattern above). `gh` stores its token under
+      # ~/.config/gh, so persisting that dir keeps you logged in to GitHub —
+      # for both `gh` commands and HTTPS git push/pull — across restarts and
+      # rebuilds. Run `gh auth login` once inside the container; reset with
+      # `make gh-logout`.
+      - gh-config:/home/vscode/.config/gh
     environment:
       DATABASE_URL: postgres://expense:expense@db:5432/expense?sslmode=disable
     ports:
@@ -36,3 +43,4 @@ services:
 volumes:
   pgdata:
   claude-config:
+  gh-config:

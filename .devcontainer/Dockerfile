@@ -29,6 +29,13 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN mkdir -p /home/vscode/.claude \
  && ln -sf /home/vscode/.claude/claude.json /home/vscode/.claude.json
 
+# Persist the GitHub CLI login in the `gh-config` named volume (mounted at
+# ~/.config/gh; `gh` is already present in the base image). Pre-creating the dir
+# as the `vscode` user makes a fresh volume inherit `vscode` ownership on first
+# mount, so `gh` can write its config / hosts.yml without hitting root-owned
+# permission errors.
+RUN mkdir -p /home/vscode/.config/gh
+
 # The native installer places the binary in ~/.local/bin; make sure it's on PATH
 # for non-login shells (e.g. `docker compose exec app claude`).
 ENV PATH="/home/vscode/.local/bin:${PATH}"

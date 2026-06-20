@@ -5,6 +5,12 @@
   "workspaceFolder": "/workspace",
   "forwardPorts": [8080, 5432, 5173],
   "postCreateCommand": "go mod download && cd frontend && npm install",
+  // Wire HTTPS git push/pull to the persisted `gh` token by registering `gh` as
+  // git's credential helper. Runs on every start so it survives rebuilds, and is
+  // idempotent. Guarded on an existing login so a fresh, not-yet-logged-in
+  // container still starts cleanly; after the one-time `gh auth login` it takes
+  // effect on the next start (or run `gh auth setup-git` yourself).
+  "postStartCommand": "gh auth status >/dev/null 2>&1 && gh auth setup-git || true",
   "remoteUser": "vscode",
   "customizations": {
     "vscode": {
