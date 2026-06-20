@@ -51,14 +51,15 @@ HTTPS git operations — with a one-command way to reset it, mirroring the exist
 - Add a `gh-config` named volume in `.devcontainer/docker-compose.yml`, mounted at
   `/home/vscode/.config/gh` on the `app` service, alongside the existing
   `claude-config` mount. Declare it under the top-level `volumes:` key.
-- In `.devcontainer/Dockerfile`, pre-create `/home/vscode/.config/gh` as the `vscode` user
-  (mirroring the existing `mkdir -p /home/vscode/.claude`) so a fresh volume inherits
-  `vscode` ownership on first mount.
-- Wire HTTPS git auth to the gh token by running `gh auth setup-git` (it registers `gh` as a
-  git credential helper). Make this persistent and idempotent — e.g. configure the credential
-  helper in `~/.gitconfig`, or run `gh auth setup-git` from `postCreateCommand` /
-  `postStartCommand` in `devcontainer.json`. Choose whichever survives rebuilds without
-  re-running an interactive login.
+- In `.devcontainer/Dockerfile`, install the GitHub CLI (`gh`) — the base image does not
+  bundle it — and pre-create `/home/vscode/.config/gh` as the `vscode` user (mirroring the
+  existing `mkdir -p /home/vscode/.claude`) so a fresh volume inherits `vscode` ownership on
+  first mount.
+- Wire HTTPS git auth to the gh token by registering `gh` as a git credential helper. This
+  must survive rebuilds AND work on the `make`/raw `docker compose` path, which never runs
+  devcontainer lifecycle hooks (`postCreate`/`postStartCommand`). Configure it at the
+  *system* level in the Dockerfile (equivalent to `gh auth setup-git`, but image-baked) so it
+  holds however the container is started; it stays inert until the one-time `gh auth login`.
 - Add a `make gh-logout` target mirroring `make logout`: `docker compose down` then
   `docker volume rm expense-app_gh-config`. Update the `.PHONY` line and the `logout`
   target's comment if it implies it resets *all* logins.

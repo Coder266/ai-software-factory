@@ -17,6 +17,8 @@
 *.exe
 *.test
 *.out
+# Default `go build` output is named after the module (expense-app)
+/expense-app
 
 # Frontend
 frontend/node_modules/
