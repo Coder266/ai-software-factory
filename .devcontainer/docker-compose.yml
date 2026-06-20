@@ -1,0 +1,38 @@
+name: expense-app
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sleep infinity
+    # Land every `exec` (claude, shell, go run) on the mounted code by default.
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace:cached
+      # Claude Code's login + config live here, in a named volume that is
+      # independent of your host. Log in once inside the container and it
+      # persists across restarts and rebuilds (see `make logout` to reset).
+      - claude-config:/home/vscode/.claude
+    environment:
+      DATABASE_URL: postgres://expense:expense@db:5432/expense?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: expense
+      POSTGRES_PASSWORD: expense
+      POSTGRES_DB: expense
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata:
+  claude-config:

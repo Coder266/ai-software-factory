@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Edit",
+      "Write",
+      "Read(./.claude/**)",
+      "Read(./CLAUDE.md)",
+      "Read(./**/CLAUDE.md)"
+    ],
+    "ask": [
+      "Edit(./.claude/**)",
+      "Write(./.claude/**)",
+      "Edit(./CLAUDE.md)",
+      "Write(./CLAUDE.md)",
+      "Edit(./**/CLAUDE.md)",
+      "Write(./**/CLAUDE.md)",
+      "Bash(tee .claude/*)",
+      "Bash(tee ./.claude/*)",
+      "Bash(tee CLAUDE.md)",
+      "Bash(cp * .claude/*)",
+      "Bash(mv * .claude/*)",
+      "Bash(sed -i* .claude/*)",
+      "Bash(sed -i* CLAUDE.md)"
+    ],
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(rm -r -f *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)",
+      "Bash(mkfs.*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard*)",
+      "Bash(git filter-branch*)",
+      "Bash(git clean -fd*)",
+      "Bash(git clean -df*)"
+    ]
+  }
+}

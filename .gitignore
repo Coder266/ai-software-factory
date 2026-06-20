@@ -1,0 +1,28 @@
+# Bank data — NEVER commit real statements
+/data/
+
+# Any CSV anywhere is treated as potentially-real bank data...
+*.csv
+# ...except synthetic fixtures explicitly kept for tests
+!testdata/**/*.csv
+
+# Secrets / local config
+.env
+.env.local
+*.local
+
+# Go build output
+/bin/
+/tmp/
+*.exe
+*.test
+*.out
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
