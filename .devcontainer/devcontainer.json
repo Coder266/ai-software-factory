@@ -5,6 +5,9 @@
   "workspaceFolder": "/workspace",
   "forwardPorts": [8080, 5432, 5173],
   "postCreateCommand": "go mod download && cd frontend && npm install",
+  // Git HTTPS auth uses a system-level `gh` credential helper baked into the
+  // image (see Dockerfile), so no `postStartCommand` is needed — just a one-time
+  // `gh auth login`.
   "remoteUser": "vscode",
   "customizations": {
     "vscode": {

@@ -2,7 +2,7 @@ COMPOSE := docker compose -f .devcontainer/docker-compose.yml
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down shell claude run psql logs ps build rebuild clean logout
+.PHONY: help up down shell claude run psql logs ps build rebuild clean logout gh-logout
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -42,6 +42,10 @@ clean: ## Stop containers and wipe ONLY the database (keeps your Claude login)
 	$(COMPOSE) down
 	-docker volume rm expense-app_pgdata
 
-logout: ## Remove the in-container Claude login (forces re-login next time)
+logout: ## Remove the in-container Claude login only (leaves GitHub + database)
 	$(COMPOSE) down
 	-docker volume rm expense-app_claude-config
+
+gh-logout: ## Remove the in-container GitHub login only (leaves Claude + database)
+	$(COMPOSE) down
+	-docker volume rm expense-app_gh-config

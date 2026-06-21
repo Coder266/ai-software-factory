@@ -14,6 +14,9 @@ services:
       # independent of your host. Log in once inside the container and it
       # persists across restarts and rebuilds (see `make logout` to reset).
       - claude-config:/home/vscode/.claude
+      # Persists the `gh` login (token under ~/.config/gh) across rebuilds, like
+      # claude-config above. Run `gh auth login` once; reset with `make gh-logout`.
+      - gh-config:/home/vscode/.config/gh
     environment:
       DATABASE_URL: postgres://expense:expense@db:5432/expense?sslmode=disable
     ports:
@@ -36,3 +39,4 @@ services:
 volumes:
   pgdata:
   claude-config:
+  gh-config:
