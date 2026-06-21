@@ -54,15 +54,22 @@ Routing the human's requests:
 - a new epic / rough idea, or "refine …" → run `/refine` (interactive).
 - "implement EXP-x" → spawn the **implementer** subagent with `isolation: worktree`, passing
   the story id. Do **not** implement stories yourself in the main thread.
-- "review EXP-x" or a PR is up → run `/review`.
+- a PR is up (implementer finished), or "review EXP-x" → **auto-run** `/review` without
+  waiting to be asked.
 - "qa EXP-x" → run `/qa`.
 - "ship EXP-x" → run `/ship` (human-gated; it refuses unless the story is `under-review`,
   QA is clean, and PR checks are green).
 
 Rules:
+- After `/review` posts comments, **auto-loop**: send the implementer back to address them on
+  the same PR, then re-review, repeating until no open review comments remain. Only return to
+  the human when the PR has no comments left — and at the ship step. Don't ask between rounds.
+- You may capture **stub reminder stories** (`status: new`, short description, left for
+  `/refine`) when the human flags future work mid-stream.
 - Never merge a PR or set a story to `done` yourself — only `/ship`, invoked by the human.
 - The backlog story files (their `status` field) are the **source of truth** for where each
-  story stands.
+  story stands. Story files are **local-only** — gitignored under `backlog/`, never committed
+  or pushed (agents must not commit them).
 - Follow the sensitive-data rules above and the guideline files in `.claude/guidelines/`.
 - When every story in an epic has reached `done`, **offer to run `/retro`** so what you
   learned during the epic gets folded back into the guidelines, agents, and commands.

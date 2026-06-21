@@ -13,6 +13,11 @@ Review the PR diff against the story's **Acceptance Criteria**:
 ## QA (`/qa`)
 Verify the *running* behavior against each acceptance criterion, with concrete evidence
 (what you did, observed vs. expected). Use `testdata/sample_statement.csv`, never real data.
+- **Test the story the way a real user would exercise it** — whatever that means for the
+  story: click through the UI, hit endpoints with `curl`, run the CLI, rebuild the
+  devcontainer, etc. The QA environment can run the real thing (including Docker), so drive
+  the actual behavior rather than inspecting the diff. Static inspection is the reviewer's
+  job; QA's value is confirming it works when run.
 - **All pass:** report PASS; write nothing to the story; leave `status: under-review` for the
   human to ship.
 - **Any failure:** append or replace a `## QA` section at the end of the story, timestamped
