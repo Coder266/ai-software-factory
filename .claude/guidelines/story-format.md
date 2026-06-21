@@ -6,9 +6,12 @@ read and update them against it.
 
 ## Location & naming
 - Path: `backlog/<epic-slug>/EXP-<id>-<story-slug>.md`
-- `<id>` = 6 random lowercase-alphanumeric chars
-  (`tr -dc 'a-z0-9' < /dev/urandom | head -c6`), mirrored in the `id:` frontmatter field.
+- `<id>` = 6 random **uppercase**-alphanumeric chars
+  (`tr -dc 'A-Z0-9' < /dev/urandom | head -c6`), mirrored in the `id:` frontmatter field —
+  so a full id reads `EXP-4VMH95`, all-caps.
 - `<epic-slug>` and `<story-slug>` are lowercase, hyphenated.
+- **Stories are local-only.** `backlog/` is gitignored; story files are never committed or
+  pushed to GitHub (agents must not commit them). The local file is the source of truth.
 
 ## Frontmatter
 ```yaml
@@ -19,7 +22,11 @@ status: <new | ready | in-progress | under-review | done>
 estimate: <≈4d or less, e.g. 2d>
 created: <YYYY-MM-DD HH:MM>
 branch: story/<story-slug>
+pr: <#number or URL — added only once the PR is merged, at ship; omit until then>
 ```
+The `pr:` field links the (local-only) story to its GitHub PR. Add it **only when the PR is
+merged** (set by `/ship`, alongside flipping `status: done` and the timestamped note) — not
+while the PR is still open. See `commits-and-prs.md`.
 Timestamps are always date **and** time to the minute (`YYYY-MM-DD HH:MM`).
 
 ## Body sections

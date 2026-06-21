@@ -6,7 +6,10 @@
       "Write",
       "Read(./.claude/**)",
       "Read(./CLAUDE.md)",
-      "Read(./**/CLAUDE.md)"
+      "Read(./**/CLAUDE.md)",
+      "Task",
+      "Agent",
+      "Skill"
     ],
     "ask": [
       "Edit(./.claude/**)",

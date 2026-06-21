@@ -25,8 +25,10 @@ the one and only place a PR gets merged.
    If anything is off, summarize what's blocking and stop.
 4. **Show what will be merged** (PR title, number, branch, commit summary) before acting.
 5. **Merge:** `gh pr merge <n> --squash --delete-branch`.
-6. **Finalize:** set the story's `status:` to `done` with a one-line note timestamped to the
-   minute (`YYYY-MM-DD HH:MM`), and commit it on the default branch.
+6. **Finalize the (local-only) story:** set `status: done`, add the `pr:` field linking the
+   now-merged PR (number/URL), and add a one-line note timestamped to the minute
+   (`YYYY-MM-DD HH:MM`). Do **not** commit the story file — `backlog/` is gitignored and
+   stories stay local (see `story-format.md`).
 
 ## Boundaries
 - Never merge if pre-flight doesn't pass.
