@@ -2,10 +2,11 @@
 id: EXP-VJ93VD
 title: Dedicated "/set-status" capability for agents
 epic: factory-v2
-status: under-review
+status: done
 estimate: 2d
 created: 2026-06-21 21:22
 branch: story/set-status-capability
+pr: https://github.com/Coder266/expense-app/pull/5
 ---
 
 # EXP-VJ93VD — Dedicated "/set-status" capability for agents
@@ -62,3 +63,4 @@ instead of editing the file, so transitions are uniform and safe.
 
 `in-progress` — back to fix: redesign set-status as a deterministic script (context-pollution finding on PR #5) _(2026-06-22 10:18)_
 `under-review` — review settled (PR #5 approved round 4, 0 blockers), handed to QA _(2026-06-22 10:49)_
+`done` — shipped via PR #5 (squash-merged to main) _(2026-06-22 11:53)_
