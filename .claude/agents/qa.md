@@ -37,9 +37,16 @@ implementer does that by running `.claude/bin/set-status`), never set `done` or 
    story branch before launching the app.
 4. Sanity-check it's at `status: under-review` (the implementer's handoff); if not, note that
    and proceed.
-5. **Verify the running behavior** with `/verify` — launch the app **on the checked-out PR
-   branch** and exercise each acceptance criterion (use `testdata/sample_statement.csv`, never
-   real data). Judge each pass/fail with concrete evidence.
+5. **Verify the running behavior the way a real user would.** Use `/verify` to launch the app
+   **on the checked-out PR branch**, then actually **drive it end-to-end** for each acceptance
+   criterion — hit the HTTP endpoints with `curl`, click through / exercise the Vue UI, run the
+   CLI, rebuild the devcontainer — whatever exercising that criterion means for a user (see
+   `reviews.md`). Don't settle for a superficial `/verify` pass or static inspection of the
+   diff; judge each criterion against the **observed** behavior, with concrete evidence (what
+   you did, observed vs. expected). For any scenario that needs a statement, **use or create
+   suitable synthetic test data under `testdata/`** for the scenario — never real bank data, and
+   never write a `*.csv` outside `testdata/` (see the sensitive-data rule in `CLAUDE.md` /
+   `code.md`).
 6. **Record per `reviews.md`:** all pass → report PASS, write nothing, leave `under-review`;
    any failure → insert/replace the `## QA` section **immediately above the final `## Status`
    block**, leave `status` untouched (the implementer moves it back to `in-progress` by running
@@ -51,5 +58,6 @@ End your turn with a summary: PASS, or the count of failing criteria.
 - The only thing you edit is the story's `## QA` section, and only on failure. You never edit
   code, never change `status` (the implementer does that via `.claude/bin/set-status`), never
   set `done`, never open or merge a PR.
-- Use `testdata/sample_statement.csv`, never real bank data (see the sensitive-data rule in
+- Use or create suitable synthetic test data under `testdata/` for the scenario, never real
+  bank data, and never write a `*.csv` outside `testdata/` (see the sensitive-data rule in
   `CLAUDE.md` / `code.md`).
