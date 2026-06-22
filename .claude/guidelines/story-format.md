@@ -66,7 +66,8 @@ position.
 
 ### The `## Status` block
 `## Status` is a visible mirror of the frontmatter `status:` field, kept in sync with it by
-`/set-status` (and finalized to `done` by `/ship`). It is the story's final section and reads:
+the `.claude/bin/set-status` script (and finalized to `done` by `/ship`). It is the story's
+final section and reads:
 
 ```markdown
 ## Status
@@ -79,19 +80,24 @@ position.
   `implementing on story/<slug>`, `code review settled, handed to QA`).
 - The timestamp is to the minute (`YYYY-MM-DD HH:MM`).
 
-**Status changes are made through `/set-status`, not by hand-editing frontmatter.** It owns the
-`status:` field, this block, and the timestamped note together, so the two never drift. The
-only exceptions are `/refine` (which authors the initial block when creating a story) and
-`/ship` (which sets `done`). See `commits-and-prs.md` for the commit flow.
+**Status changes are made through the `.claude/bin/set-status` script, not by hand-editing
+frontmatter.** The script is the single executable source of truth for the lifecycle: agents
+invoke it in **one bash line** (`.claude/bin/set-status <EXP-id> <new-status>`) and it
+deterministically validates the move against the legal table below, edits the `status:` field
+and this block in sync, adds the timestamped note, and commits the story doc to `main` — so the
+two never drift and the table is never re-derived by an LLM. The `/set-status` command is just a
+thin wrapper around the script. The only exceptions are `/refine` (which authors the initial
+block when creating a story) and `/ship` (which sets `done`). See `commits-and-prs.md` for the
+commit flow.
 
 ## Status lifecycle
 | status | meaning | reached by (who decides) |
 |--------|---------|--------------------------|
 | `new` | captured but has a blocking open question | `/refine` (authors the story) |
 | `ready` | description + criteria complete, unblocked | `/refine` (authors the story) |
-| `in-progress` | implementing **and** code review (multiple comment→fix rounds on the one PR) | implementer, via `/set-status … in-progress` |
-| `under-review` | code review settled; handed off to QA | implementer, via `/set-status … under-review` |
-| `done` | merged / shipped | the human, via `/ship` (never `/set-status`) |
+| `in-progress` | implementing **and** code review (multiple comment→fix rounds on the one PR) | implementer, via `.claude/bin/set-status <id> in-progress` |
+| `under-review` | code review settled; handed off to QA | implementer, via `.claude/bin/set-status <id> under-review` |
+| `done` | merged / shipped | the human, via `/ship` (never `set-status`) |
 
 The legal transitions are exactly:
 
@@ -103,15 +109,18 @@ i.e. `new→ready`, `ready→in-progress`, `in-progress→under-review`, and the
 `under-review→in-progress`. `→ done` is set **only** by `/ship`, as part of an actual merge.
 Any other jump (skipping a stage, illegal backward move) is invalid.
 
-- **Status changes go through `/set-status`,** which validates the transition against the table
-  above, keeps the frontmatter `status:` and the visible `## Status` block in sync, adds the
-  timestamped note, and commits to `main`. Agents call it rather than hand-editing frontmatter.
+- **Status changes go through the `.claude/bin/set-status` script,** invoked in one bash line
+  (`.claude/bin/set-status <EXP-id> <new-status>`). It deterministically validates the transition
+  against the table above (rejecting illegal jumps with the file left unchanged, and refusing
+  `→ done`), keeps the frontmatter `status:` and the visible `## Status` block in sync, adds the
+  timestamped note, and commits to `main`. Agents run the script rather than hand-editing
+  frontmatter or interpreting prose; the `/set-status` command is a thin wrapper around it.
   Authoring the initial status is `/refine`'s job; the `done` finalization is `/ship`'s.
 - "The human" means the person running the workflow (the repo owner) — never an agent.
 - Code review happens *during* `in-progress`; the story stays there through the fix rounds.
 - The implementer flips to `under-review` only when review is settled, to hand off to QA.
 - Each stage advances only the value it owns. **Only the human sets `done`,** by merging —
-  no agent ever merges or sets `done` on its own, and `/set-status` refuses `→ done`.
+  no agent ever merges or sets `done` on its own, and `set-status` refuses `→ done`.
 
 ## Estimate discipline
 Every story must be ≈4 days of human effort or less. If you can't justify that, the story is

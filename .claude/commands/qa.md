@@ -17,7 +17,7 @@ human ships.
 You may edit **exactly one thing**: a `## QA` section in the story under `backlog/`, and only
 on failure — inserted **immediately above the final `## Status` block** (never appended at
 end-of-file; `## Status` stays last). You never edit code, never change `status` (the
-implementer does that via `/set-status`), never set `done` or merge.
+implementer does that by running `.claude/bin/set-status`), never set `done` or merge.
 
 ## Steps
 1. Read `CLAUDE.md`, `reviews.md`, and `code.md`.
@@ -30,7 +30,7 @@ implementer does that via `/set-status`), never set `done` or merge.
    pass/fail with concrete evidence.
 5. **Record per `reviews.md`:** all pass → report PASS, write nothing, leave `under-review`;
    any failure → insert/replace the `## QA` section **immediately above the final `## Status`
-   block**, leave `status` untouched (the implementer moves it back to `in-progress` via
-   `/set-status`).
+   block**, leave `status` untouched (the implementer moves it back to `in-progress` by running
+   `.claude/bin/set-status <EXP-id> in-progress`).
 
 End your turn with a summary: PASS, or the count of failing criteria.

@@ -33,5 +33,6 @@ Verify the *running* behavior against each acceptance criterion, with concrete e
   ```
 
   Do **not** change the `status` — the `## QA` section is itself the signal the implementer
-  reads (the implementer takes the story back to `in-progress` via `/set-status` to fix). QA
+  reads (the implementer takes the story back to `in-progress` by running
+  `.claude/bin/set-status <EXP-id> in-progress` to fix). QA
   never edits code, never changes `status`, never sets `done`, never merges.

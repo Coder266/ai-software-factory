@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+#
+# set-status — deterministically advance a backlog story's status one legal step
+# along the AI-factory lifecycle, keeping the frontmatter `status:` field and the
+# visible `## Status` block in sync, and committing the story doc to `main`.
+#
+# Usage: .claude/bin/set-status <EXP-id> <new-status>
+#   e.g. .claude/bin/set-status EXP-VJ93VD in-progress
+#
+# The legal transition table mirrors .claude/guidelines/story-format.md. This is
+# deterministic plumbing on purpose: no LLM re-derives the lifecycle.
+#
+# Exit codes: 0 success; non-zero on usage error, rejected/refused transition,
+# or commit failure. On any rejection/refusal the story file is left UNCHANGED.
+#
+# Environment knobs (for testing):
+#   SET_STATUS_NO_COMMIT=1  — update the file but skip git commit/push.
+#   SET_STATUS_NO_PUSH=1    — commit to the current repo but skip `git push`.
+
+set -euo pipefail
+
+prog="$(basename "$0")"
+
+die() { printf '%s: %s\n' "$prog" "$1" >&2; exit "${2:-1}"; }
+
+usage() {
+  cat >&2 <<EOF
+usage: $prog <EXP-id> <new-status>
+
+  <EXP-id>      story id, e.g. EXP-VJ93VD
+  <new-status>  target status: ready | in-progress | under-review
+
+Legal transitions (mirrors story-format.md):
+  new -> ready
+  ready -> in-progress
+  in-progress -> under-review
+  under-review -> in-progress   (QA bounce)
+
+'done' is never set here — that's /ship, as part of an actual merge.
+EOF
+  exit 2
+}
+
+# --- arg parsing -------------------------------------------------------------
+[ $# -eq 2 ] || usage
+id="$1"
+target="$2"
+
+case "$id" in
+  EXP-*) ;;
+  *) die "first argument must be an EXP- story id (got '$id')" 2 ;;
+esac
+
+# --- resolve repo root (don't depend on caller CWD) --------------------------
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die "not inside a git repository"
+cd "$repo_root"
+
+# --- refuse -> done up front -------------------------------------------------
+if [ "$target" = "done" ]; then
+  die "refusing to set '$id' to 'done' — 'done' is set only by /ship as part of a merge"
+fi
+
+# --- validate target is a known status ---------------------------------------
+case "$target" in
+  ready|in-progress|under-review) ;;
+  new) die "'new' is authored by /refine, not a /set-status target" ;;
+  *) die "unknown target status '$target' (expected: ready | in-progress | under-review)" ;;
+esac
+
+# --- locate the story file ---------------------------------------------------
+mapfile -t matches < <(find backlog -type f -name "${id}-*.md" 2>/dev/null)
+case "${#matches[@]}" in
+  0) die "no story file found for '$id' under backlog/" ;;
+  1) story="${matches[0]}" ;;
+  *) die "ambiguous: multiple story files match '$id': ${matches[*]}" ;;
+esac
+
+# --- read current status from frontmatter ------------------------------------
+# Frontmatter is the first `---` ... `---` block; the status: line lives inside.
+current="$(awk '
+  NR==1 && $0=="---" { infm=1; next }
+  infm && $0=="---" { exit }
+  infm && /^status:[[:space:]]*/ {
+    sub(/^status:[[:space:]]*/, "")
+    gsub(/[[:space:]]+$/, "")
+    print
+    exit
+  }
+' "$story")"
+
+[ -n "$current" ] || die "could not read a 'status:' field from $story"
+
+# --- validate the transition against the legal table -------------------------
+legal=0
+case "$current->$target" in
+  "new->ready") legal=1 ;;
+  "ready->in-progress") legal=1 ;;
+  "in-progress->under-review") legal=1 ;;
+  "under-review->in-progress") legal=1 ;;
+esac
+
+if [ "$legal" -ne 1 ]; then
+  # name the current status and the legal next step(s) for this state
+  case "$current" in
+    new)          next="ready" ;;
+    ready)        next="in-progress" ;;
+    in-progress)  next="under-review" ;;
+    under-review) next="in-progress (QA bounce)" ;;
+    done)         next="<none — 'done' is terminal>" ;;
+    *)            next="<unknown current status>" ;;
+  esac
+  die "illegal transition for $id: '$current' -> '$target'. From '$current' the only legal next step is: $next. (File left unchanged.)"
+fi
+
+# --- compute timestamp + note ------------------------------------------------
+ts="$(date '+%Y-%m-%d %H:%M')"
+case "$target" in
+  ready)        note="refined and unblocked" ;;
+  in-progress)
+    if [ "$current" = "under-review" ]; then note="QA bounce — back to fix"
+    else note="implementing"; fi ;;
+  under-review) note="code review settled, handed to QA" ;;
+esac
+
+# --- atomically update the file ----------------------------------------------
+# A single awk pass writes a temp file, then we mv it into place (atomic on the
+# same filesystem). We update exactly two things:
+#   1. the frontmatter `status:` line
+#   2. the `## Status` block: append the new timestamped line as its last line.
+# Nothing else (code, pr:, other frontmatter, other sections) is touched.
+tmp="$(mktemp "${story}.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+awk -v target="$target" -v ts="$ts" -v note="$note" '
+  function flush_status() {
+    # emit the accumulated ## Status block, trimming trailing blanks, then the
+    # new status line.
+    end = status_n
+    while (end > 0 && status[end] ~ /^[[:space:]]*$/) end--
+    for (i = 1; i <= end; i++) print status[i]
+    print "`" target "` — " note " _(" ts ")_"
+    in_status = 0
+    status_n = 0
+  }
+  BEGIN { infm=0; fm_done=0; in_status=0; status_n=0; status_seen=0 }
+
+  # --- frontmatter handling ---
+  NR==1 && $0=="---" { infm=1; print; next }
+  infm && $0=="---" { infm=0; fm_done=1; print; next }
+  infm && /^status:[[:space:]]*/ { print "status: " target; next }
+  infm { print; next }
+
+  # --- ## Status section accumulation ---
+  in_status && /^## / {
+    # another heading after ## Status (should not normally happen since Status is
+    # last) — flush what we have and fall through to print this heading.
+    flush_status()
+  }
+  in_status {
+    status[++status_n] = $0
+    next
+  }
+  /^## Status[[:space:]]*$/ {
+    in_status = 1
+    status_seen = 1
+    print
+    next
+  }
+
+  { print }
+
+  END {
+    if (in_status) flush_status()
+    else if (!status_seen) {
+      # No ## Status section existed — create one as the final section.
+      print ""
+      print "## Status"
+      print ""
+      print "`" target "` — " note " _(" ts ")_"
+    }
+  }
+' "$story" > "$tmp"
+
+# sanity: the new frontmatter status must be the target
+new_fm="$(awk '
+  NR==1 && $0=="---" { infm=1; next }
+  infm && $0=="---" { exit }
+  infm && /^status:[[:space:]]*/ { sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]+$/,""); print; exit }
+' "$tmp")"
+[ "$new_fm" = "$target" ] || die "internal error: frontmatter not updated to '$target'"
+
+mv "$tmp" "$story"
+trap - EXIT
+
+# --- commit (and push) to main ----------------------------------------------
+msg="$id: set status $target
+
+Generated with Claude Opus 4.8"
+
+if [ "${SET_STATUS_NO_COMMIT:-}" = "1" ]; then
+  printf '%s: %s -> %s in %s (file updated, commit skipped)\n' "$prog" "$current" "$target" "$story"
+  exit 0
+fi
+
+git commit -q "$story" -m "$msg" || die "git commit failed for $story"
+
+if [ "${SET_STATUS_NO_PUSH:-}" = "1" ]; then
+  printf '%s: %s: %s -> %s (committed, push skipped)\n' "$prog" "$id" "$current" "$target"
+  exit 0
+fi
+
+git push -q origin HEAD:main || die "git push to origin main failed"
+
+printf '%s: %s: %s -> %s (committed and pushed to main)\n' "$prog" "$id" "$current" "$target"
