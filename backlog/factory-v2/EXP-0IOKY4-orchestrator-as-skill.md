@@ -2,7 +2,7 @@
 id: EXP-0IOKY4
 title: Make the orchestrator a /factory skill, not the main context
 epic: factory-v2
-status: ready
+status: in-progress
 estimate: 4d
 created: 2026-06-21 21:22
 branch: story/orchestrator-as-skill
@@ -61,3 +61,4 @@ Because the step agents are isolated ([`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isol
 ## Status
 
 `ready` — refined and unblocked _(2026-06-21 21:22)_
+`in-progress` — implementing _(2026-06-22 21:28)_
