@@ -227,5 +227,73 @@ git -C "$work" show origin/main:code.go >/dev/null 2>&1 && nok "branch-safety: c
 [ -z "$(git -C "$work" worktree list --porcelain | grep -A1 "^worktree" | grep -v "^worktree $work\$" | grep "^worktree")" ] && ok "branch-safety: no temp worktree leaked" || nok "branch-safety: temp worktree leaked ($(git -C "$work" worktree list))"
 
 # ---------------------------------------------------------------------------
+# 10. SOURCE OF TRUTH — main is AHEAD of the story branch's frozen story copy.
+#     The implementer's normal handoff: a transition already landed on main
+#     (in-progress) while the code branch's backlog copy is still the stale
+#     branch-creation value (ready). Running set-status from the story branch must
+#     decide the transition from MAIN's status (in-progress -> under-review) and
+#     succeed, leaving the story branch's copy / working tree untouched.
+bare2="$(mktemp -d)"; git init -q --bare -b main "$bare2"
+work2="$(mktemp -d)"
+git -C "$work2" init -q -b main
+git -C "$work2" config user.email t@t.test
+git -C "$work2" config user.name test
+git -C "$work2" remote add origin "$bare2"
+mkdir -p "$work2/backlog/test-epic"
+# seed the story as 'ready' on main and publish it (this is what the story branch
+# will be cut from — its frozen copy).
+{
+  printf -- '---\nid: EXP-FFF001\ntitle: Fixture\nepic: test-epic\nstatus: ready\nestimate: 1d\nbranch: story/fixture\n---\n\n'
+  printf '# EXP-FFF001 — Fixture\n\n## Description\n\nA fixture.\n\n'
+  printf '## Status\n\n`ready` — seeded _(2026-01-01 00:00)_\n'
+} > "$work2/backlog/test-epic/EXP-FFF001-fixture.md"
+git -C "$work2" add -A >/dev/null 2>&1
+git -C "$work2" commit -qm seed >/dev/null 2>&1
+git -C "$work2" push -q origin main >/dev/null 2>&1
+
+# cut the story branch NOW (its backlog copy is frozen at 'ready') with an
+# unrelated code commit, simulating the implementer mid-work.
+git -C "$work2" checkout -q -b story/fff
+printf 'package main\n' > "$work2/code.go"
+git -C "$work2" add -A >/dev/null 2>&1
+git -C "$work2" commit -qm "code: wip" >/dev/null 2>&1
+
+# now advance main to in-progress out-of-band (as a prior set-status from main
+# would have): commit on main and push, leaving the story branch copy stale.
+git -C "$work2" checkout -q main
+{
+  printf -- '---\nid: EXP-FFF001\ntitle: Fixture\nepic: test-epic\nstatus: in-progress\nestimate: 1d\nbranch: story/fixture\n---\n\n'
+  printf '# EXP-FFF001 — Fixture\n\n## Description\n\nA fixture.\n\n'
+  printf '## Status\n\n`ready` — seeded _(2026-01-01 00:00)_\n`in-progress` — implementing _(2026-01-02 00:00)_\n'
+} > "$work2/backlog/test-epic/EXP-FFF001-fixture.md"
+git -C "$work2" add -A >/dev/null 2>&1
+git -C "$work2" commit -qm "EXP-FFF001: set status in-progress" >/dev/null 2>&1
+git -C "$work2" push -q origin main >/dev/null 2>&1
+
+# back on the story branch (frozen copy still 'ready'); confirm the stale state.
+git -C "$work2" checkout -q story/fff
+[ "$(git -C "$work2" show HEAD:backlog/test-epic/EXP-FFF001-fixture.md | fm)" = "ready" ] && ok "src-of-truth: story branch copy is stale ('ready')" || nok "src-of-truth: story branch copy stale precondition"
+sot_head_before="$(git -C "$work2" rev-parse HEAD)"
+git -C "$work2" fetch -q origin >/dev/null 2>&1
+sot_main_before="$(git -C "$work2" rev-parse origin/main)"
+
+# run from the story branch. Decision must come from main (in-progress), so the
+# legal next step is under-review — even though the branch copy says 'ready'.
+out="$( cd "$work2" && "$SCRIPT" EXP-FFF001 under-review 2>&1 )"; rc=$?
+[ $rc -eq 0 ] && ok "src-of-truth: in-progress(main)->under-review succeeds from stale story branch" || nok "src-of-truth: handoff from stale branch (rc=$rc out=$out)"
+
+git -C "$work2" fetch -q origin >/dev/null 2>&1
+[ "$(git -C "$work2" show origin/main:backlog/test-epic/EXP-FFF001-fixture.md | fm)" = "under-review" ] && ok "src-of-truth: main advanced in-progress->under-review" || nok "src-of-truth: main now under-review (got $(git -C "$work2" show origin/main:backlog/test-epic/EXP-FFF001-fixture.md | fm))"
+# exactly one new commit on main, touching only the story doc
+sot_n="$(git -C "$work2" rev-list --count "$sot_main_before..$(git -C "$work2" rev-parse origin/main)")"
+[ "$sot_n" = "1" ] && ok "src-of-truth: main advanced by exactly one commit" || nok "src-of-truth: main advanced by one commit (got $sot_n)"
+sot_changed="$(git -C "$work2" diff --name-only "$sot_main_before" "$(git -C "$work2" rev-parse origin/main)")"
+[ "$sot_changed" = "backlog/test-epic/EXP-FFF001-fixture.md" ] && ok "src-of-truth: the main commit touches only the story doc" || nok "src-of-truth: main commit touches only story doc (changed: $sot_changed)"
+# story branch untouched: HEAD, working tree, and the frozen story copy
+[ "$(git -C "$work2" rev-parse HEAD)" = "$sot_head_before" ] && ok "src-of-truth: story branch HEAD unchanged" || nok "src-of-truth: story branch HEAD unchanged"
+[ -z "$(git -C "$work2" status --porcelain)" ] && ok "src-of-truth: story branch working tree clean" || nok "src-of-truth: story branch working tree clean (dirty: $(git -C "$work2" status --porcelain))"
+[ "$(git -C "$work2" show HEAD:backlog/test-epic/EXP-FFF001-fixture.md | fm)" = "ready" ] && ok "src-of-truth: stale story branch copy left untouched" || nok "src-of-truth: stale story branch copy untouched"
+
+# ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

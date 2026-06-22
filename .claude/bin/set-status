@@ -10,14 +10,19 @@
 # The legal transition table mirrors .claude/guidelines/story-format.md. This is
 # deterministic plumbing on purpose: no LLM re-derives the lifecycle.
 #
-# Branch safety: the story-doc commit must land on `main` regardless of which
-# branch is checked out, because this script is invoked both from `main` (the
-# orchestrator) AND from a `story/<slug>` code branch (the implementer/qa, which
-# create the code branch *then* flip status). To stay independent of the caller's
-# branch and working tree, the edit+commit+push happen in a throwaway git worktree
-# checked out on a freshly fetched `origin/main`. The caller's branch never gains a
-# commit and its working tree is never touched; only the single story-doc commit
-# lands on `origin/main`.
+# Branch safety + single source of truth: the story-doc commit must land on `main`
+# regardless of which branch is checked out, because this script is invoked both
+# from `main` (the orchestrator) AND from a `story/<slug>` code branch (the
+# implementer/qa, which create the code branch *then* flip status). To stay
+# independent of the caller's branch and working tree, the current status is READ
+# FROM, validated against, and edited on a throwaway git worktree checked out on a
+# freshly fetched `origin/main`; the commit+push happen there too. `main` is the
+# single source of truth: the caller's local `backlog/` copy is intentionally
+# ignored for the decision because on a code branch it is frozen at branch-creation
+# time and goes stale the moment a transition lands on `main` (so e.g. the normal
+# in-progress -> under-review handoff works even though the branch copy still says
+# the older status). The caller's branch never gains a commit and its working tree
+# is never touched; only the single story-doc commit lands on `origin/main`.
 #
 # Exit codes: 0 success; non-zero on usage error, rejected/refused transition,
 # or commit failure. On any rejection/refusal the story file is left UNCHANGED.
@@ -81,7 +86,14 @@ case "$target" in
   *) die "unknown target status '$target' (expected: ready | in-progress | under-review)" ;;
 esac
 
-# --- locate the story file ---------------------------------------------------
+# --- locate the story file (for the path; the status VALUE comes from main) ---
+# We locate the story under the caller's backlog/ only to confirm the id exists
+# and to surface a friendly path in messages. The authoritative current status
+# and the file we actually transform come from the base (origin/main) copy read
+# inside the throwaway worktree below — `main` is the single source of truth.
+# On a `story/<slug>` code branch the caller's backlog/ copy is frozen at branch
+# creation, so it may be stale (or, for the NO_COMMIT test path, it is the only
+# copy). It must not factor into the transition decision on the commit path.
 mapfile -t matches < <(find backlog -type f -name "${id}-*.md" 2>/dev/null)
 case "${#matches[@]}" in
   0) die "no story file found for '$id' under backlog/" ;;
@@ -89,33 +101,37 @@ case "${#matches[@]}" in
   *) die "ambiguous: multiple story files match '$id': ${matches[*]}" ;;
 esac
 
-# --- read current status from frontmatter ------------------------------------
+# --- read current status from a story file's frontmatter ---------------------
 # Frontmatter is the first `---` ... `---` block; the status: line lives inside.
-current="$(awk '
-  NR==1 && $0=="---" { infm=1; next }
-  infm && $0=="---" { exit }
-  infm && /^status:[[:space:]]*/ {
-    sub(/^status:[[:space:]]*/, "")
-    gsub(/[[:space:]]+$/, "")
-    print
-    exit
-  }
-' "$story")"
-
-[ -n "$current" ] || die "could not read a 'status:' field from $story"
+read_status() {
+  awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---" { exit }
+    infm && /^status:[[:space:]]*/ {
+      sub(/^status:[[:space:]]*/, "")
+      gsub(/[[:space:]]+$/, "")
+      print
+      exit
+    }
+  ' "$1"
+}
 
 # --- validate the transition against the legal table -------------------------
-legal=0
-case "$current->$target" in
-  "new->ready") legal=1 ;;
-  "ready->in-progress") legal=1 ;;
-  "in-progress->under-review") legal=1 ;;
-  "under-review->in-progress") legal=1 ;;
-esac
+# Given the current status (the source of truth — from main on the commit path,
+# from the in-repo file only on the NO_COMMIT path), return cleanly if the step
+# to $target is legal, else die with a message naming the legal next step.
+validate_transition() {
+  local cur="$1" legal=0
+  case "$cur->$target" in
+    "new->ready") legal=1 ;;
+    "ready->in-progress") legal=1 ;;
+    "in-progress->under-review") legal=1 ;;
+    "under-review->in-progress") legal=1 ;;
+  esac
+  [ "$legal" -eq 1 ] && return 0
 
-if [ "$legal" -ne 1 ]; then
-  # name the current status and the legal next step(s) for this state
-  case "$current" in
+  local next
+  case "$cur" in
     new)          next="ready" ;;
     ready)        next="in-progress" ;;
     in-progress)  next="under-review" ;;
@@ -123,18 +139,24 @@ if [ "$legal" -ne 1 ]; then
     done)         next="<none — 'done' is terminal>" ;;
     *)            next="<unknown current status>" ;;
   esac
-  die "illegal transition for $id: '$current' -> '$target'. From '$current' the only legal next step is: $next. (File left unchanged.)"
-fi
+  die "illegal transition for $id: '$cur' -> '$target'. From '$cur' the only legal next step is: $next. (File left unchanged.)"
+}
 
 # --- compute timestamp + note ------------------------------------------------
+# The timestamp is independent of the current status; the human-readable note
+# depends on it (so it's set once `current` is known, via note_for <cur>).
 ts="$(date '+%Y-%m-%d %H:%M')"
-case "$target" in
-  ready)        note="refined and unblocked" ;;
-  in-progress)
-    if [ "$current" = "under-review" ]; then note="QA bounce — back to fix"
-    else note="implementing"; fi ;;
-  under-review) note="code review settled, handed to QA" ;;
-esac
+note=""
+note_for() {
+  local cur="$1"
+  case "$target" in
+    ready)        note="refined and unblocked" ;;
+    in-progress)
+      if [ "$cur" = "under-review" ]; then note="QA bounce — back to fix"
+      else note="implementing"; fi ;;
+    under-review) note="code review settled, handed to QA" ;;
+  esac
+}
 
 # --- the file transformation -------------------------------------------------
 # Apply the status edit to a story file IN PLACE, atomically. We update exactly
@@ -219,19 +241,29 @@ msg="$id: set status $target
 Generated with Claude Opus 4.8"
 
 # --- NO_COMMIT: edit the in-repo file in place, skip git entirely -------------
-# This path mutates the caller's working tree on purpose (tests assert on it) and
-# needs no remote. It is NOT used in normal operation.
+# This path has no `main` to read from, so the in-repo file IS the source of
+# truth: read current status from it, validate, and transform it in place. It
+# mutates the caller's working tree on purpose (tests assert on it) and needs no
+# remote. It is NOT used in normal operation.
 if [ "${SET_STATUS_NO_COMMIT:-}" = "1" ]; then
+  current="$(read_status "$story")"
+  [ -n "$current" ] || die "could not read a 'status:' field from $story"
+  validate_transition "$current"
+  note_for "$current"
   transform_story "$story"
   printf '%s: %s -> %s in %s (file updated, commit skipped)\n' "$prog" "$current" "$target" "$story"
   exit 0
 fi
 
 # --- commit (and push) to main via a throwaway worktree ----------------------
-# Do the edit+commit on a fresh `main` in an isolated worktree, so neither the
-# caller's branch nor its working tree is touched and only the story-doc commit
-# lands on `main`. We fetch origin/main when a remote exists; otherwise (e.g. in
-# NO_PUSH tests with no remote) we fall back to the local `main` branch.
+# `main` is the single source of truth. We check out a fresh `main` in an
+# isolated, detached worktree and read the current status, validate the
+# transition, and apply the edit ALL against that copy — never the caller's
+# working copy, which on a `story/<slug>` code branch is frozen at branch
+# creation and therefore stale. Neither the caller's branch nor its working tree
+# is touched; only the single story-doc commit lands on `main`. We fetch
+# origin/main when a remote exists; otherwise (e.g. NO_PUSH tests with no remote)
+# we fall back to the local `main` branch.
 wt=""
 cleanup() { [ -n "$wt" ] && git worktree remove "$wt" --force >/dev/null 2>&1; }
 trap cleanup EXIT
@@ -249,8 +281,9 @@ wt="$(mktemp -d)"
 git worktree add -q --detach "$wt" "$base" \
   || die "could not create worktree on $base"
 
-# Locate the story in the freshly-checked-out main (it may live at a different
-# path than the caller's working copy, though normally it's the same).
+# Locate the story directly under the freshly-checked-out main's backlog/. This
+# is authoritative even for a story that exists on main but whose caller-side
+# path we discovered above (the two normally match).
 mapfile -t wt_matches < <(find "$wt/backlog" -type f -name "${id}-*.md" 2>/dev/null)
 case "${#wt_matches[@]}" in
   0) die "story '$id' not found under backlog/ on $base" ;;
@@ -258,15 +291,13 @@ case "${#wt_matches[@]}" in
   *) die "ambiguous: multiple story files match '$id' on $base: ${wt_matches[*]}" ;;
 esac
 
-# Re-validate against main's copy: act on the freshly-fetched content, not stale.
-wt_current="$(awk '
-  NR==1 && $0=="---" { infm=1; next }
-  infm && $0=="---" { exit }
-  infm && /^status:[[:space:]]*/ { sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]+$/,""); print; exit }
-' "$wt_story")"
-if [ "$wt_current" != "$current" ]; then
-  die "status on $base ('$wt_current') differs from the local working copy ('$current') for $id — refusing to act on stale content; re-sync and retry"
-fi
+# Derive current status from MAIN's copy and validate the transition from it.
+# The caller's local copy is intentionally ignored: it may be stale (or absent)
+# on a code branch and must not factor into the decision.
+current="$(read_status "$wt_story")"
+[ -n "$current" ] || die "could not read a 'status:' field from $id on $base"
+validate_transition "$current"
+note_for "$current"
 
 transform_story "$wt_story"
 git -C "$wt" commit -q "$wt_story" -m "$msg" || die "git commit failed for $story on $base"
