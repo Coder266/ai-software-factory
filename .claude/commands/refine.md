@@ -11,8 +11,12 @@ artifacts (the tracked `backlog/` docs) rather than conversation state.
 
 ## Dispatch
 
-Spawn the `refine` subagent (`isolation: worktree`, matching how the implementer is spawned).
-Give it a **scoped** prompt that by default contains **only**:
+Spawn the `refine` subagent **on `main`** (no worktree isolation). Unlike the implementer,
+review, and qa agents, refine touches **no** code working tree — it only authors `backlog/`
+docs that must land on `main`. A worktree would check out a throwaway branch instead of `main`,
+so authoring commits wouldn't reach `origin/main`, and there's no code tree to isolate. So it
+runs on `main` directly, committing story docs there (`set-status` does the same for status
+transitions). Give it a **scoped** prompt that by default contains **only**:
 
 - the epic name / rough idea from `$ARGUMENTS` (if empty, ask the human for it first, then
   dispatch);

@@ -12,8 +12,11 @@ artifacts (the story's Acceptance Criteria, and a `## QA` section or a PASS as i
 ## Dispatch
 
 Spawn the `qa` subagent (`isolation: worktree`, matching how the implementer is spawned — QA
-needs a clean checkout of the PR branch to run the app). Give it a **scoped** prompt that by
-default contains **only**:
+needs a clean working tree to run the app). The worktree starts on the **current** branch
+(`main`), **not** the story's PR branch, so the agent's first step is to **fetch and check out
+the PR branch** (`story/<slug>`) into its worktree before launching the app — otherwise it
+would exercise `main` and report a false result (`agents/qa.md` step 3 spells this out). Give
+it a **scoped** prompt that by default contains **only**:
 
 - the target from `$ARGUMENTS` — an `EXP-` id, a PR number, or empty (use the current branch);
 - a pointer to the repo and its guidelines — the agent reads `.claude/guidelines/reviews.md`,

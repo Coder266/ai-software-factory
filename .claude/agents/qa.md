@@ -27,13 +27,20 @@ implementer does that by running `.claude/bin/set-status`), never set `done` or 
 ## Steps
 1. Read `CLAUDE.md`, `reviews.md`, and `code.md`.
 2. **Resolve the story** (an `EXP-` id, a PR number, or the current branch) under `backlog/**`.
-   Read its Description and Acceptance Criteria.
-3. Sanity-check it's at `status: under-review` (the implementer's handoff); if not, note that
+   Read its Description and Acceptance Criteria, and note its PR branch (the `branch:`
+   frontmatter field, or `gh pr view <PR#> --json headRefName`).
+3. **Check out the PR branch before running anything.** Your worktree starts on `main`, **not**
+   the story's code branch, so you must fetch and check out the PR's `story/<slug>` branch into
+   this worktree first — otherwise `/verify` would launch `main` and you'd report a false
+   result. Run `git fetch origin story/<slug>` then `git checkout story/<slug>` (or hand the PR
+   ref to `/verify` so it checks out the PR's code). Confirm `git branch --show-current` is the
+   story branch before launching the app.
+4. Sanity-check it's at `status: under-review` (the implementer's handoff); if not, note that
    and proceed.
-4. **Verify the running behavior** with `/verify` — launch the app and exercise each
-   acceptance criterion (use `testdata/sample_statement.csv`, never real data). Judge each
-   pass/fail with concrete evidence.
-5. **Record per `reviews.md`:** all pass → report PASS, write nothing, leave `under-review`;
+5. **Verify the running behavior** with `/verify` — launch the app **on the checked-out PR
+   branch** and exercise each acceptance criterion (use `testdata/sample_statement.csv`, never
+   real data). Judge each pass/fail with concrete evidence.
+6. **Record per `reviews.md`:** all pass → report PASS, write nothing, leave `under-review`;
    any failure → insert/replace the `## QA` section **immediately above the final `## Status`
    block**, leave `status` untouched (the implementer moves it back to `in-progress` by running
    `.claude/bin/set-status <EXP-id> in-progress`).
