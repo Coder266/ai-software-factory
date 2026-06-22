@@ -25,7 +25,9 @@ The project is meant to run **inside the devcontainer**:
 
 ## AI factory workflow (definition of done)
 Each story flows through:
-1. **Refine** — `/refine` turns the story into clear acceptance criteria (`backlog/`).
+1. **Refine** — `/refine` turns the story into clear acceptance criteria, committed under
+   `backlog/` on `main` (story docs are tracked in the repo; status changes are committed to
+   `main` by `/set-status`, and the `done` finalization by `/ship`).
 2. **Implement** — the implementer agent works one story per branch (`story/<slug>`) and opens a PR.
 3. **Review** — `/review` reviews the PR against the acceptance criteria and posts GitHub comments; the implementer addresses them on the same PR.
 4. **QA** — `/verify` the running behavior against the acceptance criteria; on failure it appends a `## QA` section for the implementer to fix.
@@ -68,8 +70,10 @@ Rules:
   `/refine`) when the human flags future work mid-stream.
 - Never merge a PR or set a story to `done` yourself — only `/ship`, invoked by the human.
 - The backlog story files (their `status` field) are the **source of truth** for where each
-  story stands. Story files are **local-only** — gitignored under `backlog/`, never committed
-  or pushed (agents must not commit them).
+  story stands. Story files are **tracked in the repo** under `backlog/` — committed to `main`
+  directly by `/refine`, `/set-status`, and `/ship` so they're browseable and linkable on
+  GitHub. They are never bundled into a `story/<slug>` code branch, so code PR diffs stay free
+  of `backlog/` files. See `.claude/guidelines/commits-and-prs.md`.
 - Follow the sensitive-data rules above and the guideline files in `.claude/guidelines/`.
 - When every story in an epic has reached `done`, **offer to run `/retro`** so what you
   learned during the epic gets folded back into the guidelines, agents, and commands.

@@ -10,8 +10,12 @@ read and update them against it.
   (`tr -dc 'A-Z0-9' < /dev/urandom | head -c6`), mirrored in the `id:` frontmatter field —
   so a full id reads `EXP-4VMH95`, all-caps.
 - `<epic-slug>` and `<story-slug>` are lowercase, hyphenated.
-- **Stories are local-only.** `backlog/` is gitignored; story files are never committed or
-  pushed to GitHub (agents must not commit them). The local file is the source of truth.
+- **Stories are tracked in the repo.** `backlog/` is committed to `main`, so every story is
+  browseable and linkable on GitHub. Story docs are committed to `main` **directly** — by
+  `/refine` (authoring/edits), `/set-status` (status changes), and `/ship` (the `done`
+  finalization) — and never ride a `story/<slug>` code branch, so they stay out of code PR
+  diffs. Story files carry no sensitive data; the bank-data protections (`/data/`, `*.csv`)
+  are independent. See `commits-and-prs.md` for the commit flow.
 
 ## Frontmatter
 ```yaml
@@ -24,7 +28,7 @@ created: <YYYY-MM-DD HH:MM>
 branch: story/<story-slug>
 pr: <#number or URL — added only once the PR is merged, at ship; omit until then>
 ```
-The `pr:` field links the (local-only) story to its GitHub PR. Add it **only when the PR is
+The `pr:` field links the (repo-tracked) story to its GitHub PR. Add it **only when the PR is
 merged** (set by `/ship`, alongside flipping `status: done` and the timestamped note) — not
 while the PR is still open. See `commits-and-prs.md`.
 Timestamps are always date **and** time to the minute (`YYYY-MM-DD HH:MM`).
