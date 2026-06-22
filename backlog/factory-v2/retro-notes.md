@@ -34,3 +34,23 @@ rules in the guidelines/agents/commands.
   few hours of human effort. Fold the corrected unit into `story-format.md`'s "Estimate
   discipline" section (and reword the `estimate:` examples accordingly, e.g. `2d` → `2h`).
   _Source: human, 2026-06-22._
+
+- **QA must exercise the app like a real user, not just `/verify`.** The qa agent should drive
+  the running app end-to-end — call HTTP endpoints with `curl`, click through the Vue UI, run
+  the CLI — and judge each criterion against observed behavior, not a superficial `/verify` pass
+  or static inspection. Applied now to `agents/qa.md` (and `reviews.md` already says it); make it
+  a stated expectation of the qa agent at retro. _Source: human, 2026-06-22 (PR #6,
+  [`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isolated.md))._
+
+- **Don't hard-pin one test fixture in agent docs.** Agent/guideline wording should say "use or
+  create suitable synthetic test data under `testdata/`" rather than naming a single fixture
+  file — while keeping the sensitive-data hard rule (never real data, never `*.csv` outside
+  `testdata/`). Applied now to `agents/qa.md` + `reviews.md`. _Source: human, 2026-06-22 (PR #6,
+  [`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isolated.md))._
+
+- **Open question for [`EXP-0IOKY4`](EXP-0IOKY4-orchestrator-as-skill.md): do we even need the
+  `/refine` `/review` `/qa` command dispatchers, or can the orchestrator/`/factory` skill call
+  the agents directly?** Raised by the human on PR #6; the command layer was **kept** in
+  `EXP-XEYYQL` and the decision deferred to the orchestrator-as-`/factory` story, which owns how
+  steps get invoked. `EXP-0IOKY4` must explicitly resolve whether the thin command layer earns
+  its keep. _Source: human, 2026-06-22._
