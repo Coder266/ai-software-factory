@@ -295,5 +295,81 @@ sot_changed="$(git -C "$work2" diff --name-only "$sot_main_before" "$(git -C "$w
 [ "$(git -C "$work2" show HEAD:backlog/test-epic/EXP-FFF001-fixture.md | fm)" = "ready" ] && ok "src-of-truth: stale story branch copy left untouched" || nok "src-of-truth: stale story branch copy untouched"
 
 # ---------------------------------------------------------------------------
+# 11. CALLER-ON-MAIN FAST-FORWARD — invoked from a checkout that is ON `main`
+#     with a real (bare) remote. After the push to origin/main, the script should
+#     fast-forward the caller's LOCAL main (ref + working-tree story file) up to
+#     origin/main so the caller stays in sync. This must NOT happen from a story
+#     branch (covered by §9, which asserts the working tree stays clean / unchanged).
+bare3="$(mktemp -d)"; git init -q --bare -b main "$bare3"
+work3="$(mktemp -d)"
+git -C "$work3" init -q -b main
+git -C "$work3" config user.email t@t.test
+git -C "$work3" config user.name test
+git -C "$work3" remote add origin "$bare3"
+mkdir -p "$work3/backlog/test-epic"
+{
+  printf -- '---\nid: EXP-GGG001\ntitle: Fixture\nepic: test-epic\nstatus: ready\nestimate: 1d\nbranch: story/fixture\n---\n\n'
+  printf '# EXP-GGG001 — Fixture\n\n## Description\n\nA fixture.\n\n'
+  printf '## Status\n\n`ready` — seeded _(2026-01-01 00:00)_\n'
+} > "$work3/backlog/test-epic/EXP-GGG001-fixture.md"
+git -C "$work3" add -A >/dev/null 2>&1
+git -C "$work3" commit -qm seed >/dev/null 2>&1
+git -C "$work3" push -q origin main >/dev/null 2>&1
+# make local main track origin/main so a later fetch updates the remote-tracking ref
+git -C "$work3" branch --set-upstream-to=origin/main main >/dev/null 2>&1
+
+ff_main_before="$(git -C "$work3" rev-parse main)"
+
+# run from a clean checkout that is ON main (real push path, no NO_PUSH)
+out="$( cd "$work3" && "$SCRIPT" EXP-GGG001 in-progress 2>&1 )"; rc=$?
+[ $rc -eq 0 ] && ok "on-main: script succeeds from main (rc=0)" || nok "on-main: script from main (rc=$rc out=$out)"
+[ "$(git -C "$work3" rev-parse --abbrev-ref HEAD)" = "main" ] && ok "on-main: still on main after run" || nok "on-main: still on main (on $(git -C "$work3" rev-parse --abbrev-ref HEAD))"
+
+# the caller's LOCAL main advanced to the pushed commit (fast-forwarded)
+git -C "$work3" fetch -q origin >/dev/null 2>&1
+ff_origin_after="$(git -C "$work3" rev-parse origin/main)"
+ff_main_after="$(git -C "$work3" rev-parse main)"
+[ "$ff_main_after" != "$ff_main_before" ] && ok "on-main: local main ref advanced" || nok "on-main: local main ref advanced (still $ff_main_before)"
+[ "$ff_main_after" = "$ff_origin_after" ] && ok "on-main: local main now equals origin/main" || nok "on-main: local main equals origin/main (main=$ff_main_after origin=$ff_origin_after)"
+
+# the caller's WORKING-TREE story file reflects the new status (in-progress)
+[ "$(fm < "$work3/backlog/test-epic/EXP-GGG001-fixture.md")" = "in-progress" ] && ok "on-main: caller working-tree story file fast-forwarded to in-progress" || nok "on-main: working-tree story file fast-forwarded (got $(fm < "$work3/backlog/test-epic/EXP-GGG001-fixture.md"))"
+# working tree is clean (the ff applied without leaving local modifications)
+[ -z "$(git -C "$work3" status --porcelain)" ] && ok "on-main: working tree clean after fast-forward" || nok "on-main: working tree clean (dirty: $(git -C "$work3" status --porcelain))"
+
+# 11b. best-effort: a caller-on-main whose local main has DIVERGED from origin/main
+#      cannot be fast-forwarded and must NOT fail the command. The push still
+#      succeeds; the local main is left behind, with a warning to pull.
+bare4="$(mktemp -d)"; git init -q --bare -b main "$bare4"
+work4="$(mktemp -d)"
+git -C "$work4" init -q -b main
+git -C "$work4" config user.email t@t.test
+git -C "$work4" config user.name test
+git -C "$work4" remote add origin "$bare4"
+mkdir -p "$work4/backlog/test-epic"
+{
+  printf -- '---\nid: EXP-HHH001\ntitle: Fixture\nepic: test-epic\nstatus: ready\nestimate: 1d\nbranch: story/fixture\n---\n\n'
+  printf '# EXP-HHH001 — Fixture\n\n## Description\n\nA fixture.\n\n'
+  printf '## Status\n\n`ready` — seeded _(2026-01-01 00:00)_\n'
+} > "$work4/backlog/test-epic/EXP-HHH001-fixture.md"
+git -C "$work4" add -A >/dev/null 2>&1
+git -C "$work4" commit -qm seed >/dev/null 2>&1
+git -C "$work4" push -q origin main >/dev/null 2>&1
+git -C "$work4" branch --set-upstream-to=origin/main main >/dev/null 2>&1
+# diverge local main with a committed local-only change to an UNRELATED file, so the
+# story-doc commit the script lands on origin/main cannot fast-forward onto it.
+printf 'local only\n' > "$work4/NOTES.txt"
+git -C "$work4" add -A >/dev/null 2>&1
+git -C "$work4" commit -qm "local: diverging commit" >/dev/null 2>&1
+diverged_main_before="$(git -C "$work4" rev-parse main)"
+out="$( cd "$work4" && "$SCRIPT" EXP-HHH001 in-progress 2>&1 )"; rc=$?
+[ $rc -eq 0 ] && ok "on-main(diverged): command still succeeds (push done), exit 0" || nok "on-main(diverged): command exit 0 (rc=$rc out=$out)"
+echo "$out" | grep -qi "git pull --ff-only" && ok "on-main(diverged): warns to pull --ff-only" || nok "on-main(diverged): warns to pull (out=$out)"
+# local main left untouched (not fast-forwarded), and the push still landed on origin/main
+[ "$(git -C "$work4" rev-parse main)" = "$diverged_main_before" ] && ok "on-main(diverged): local main left untouched" || nok "on-main(diverged): local main untouched"
+git -C "$work4" fetch -q origin >/dev/null 2>&1
+[ "$(git -C "$work4" show origin/main:backlog/test-epic/EXP-HHH001-fixture.md | fm)" = "in-progress" ] && ok "on-main(diverged): push to origin/main still succeeded" || nok "on-main(diverged): origin/main advanced"
+
+# ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

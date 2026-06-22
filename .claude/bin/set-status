@@ -24,6 +24,13 @@
 # the older status). The caller's branch never gains a commit and its working tree
 # is never touched; only the single story-doc commit lands on `origin/main`.
 #
+# One ergonomic exception: when the caller's checkout is itself ON `main` (the
+# orchestrator's normal case), after the push the script best-effort fast-forwards
+# the caller's local `main` up to the just-pushed `origin/main` so the caller's
+# next push isn't rejected as non-fast-forward. This is done ONLY when on `main`
+# (never on a story branch / detached HEAD — branch safety is preserved) and never
+# fails the command: if it can't fast-forward cleanly it warns and still exits 0.
+#
 # Exit codes: 0 success; non-zero on usage error, rejected/refused transition,
 # or commit failure. On any rejection/refusal the story file is left UNCHANGED.
 #
@@ -315,3 +322,28 @@ fi
 git -C "$wt" push -q origin HEAD:main || die "git push to origin main failed"
 
 printf '%s: %s: %s -> %s (committed and pushed to main)\n' "$prog" "$id" "$current" "$target"
+
+# --- best-effort: keep the caller's local `main` in sync ----------------------
+# The commit+push above happened entirely inside the throwaway worktree, so the
+# caller's own checkout is untouched — that branch-safety property is REQUIRED and
+# must hold when invoked from a `story/<slug>` branch (or detached HEAD): in that
+# case we do NOTHING here. But when the caller is itself ON `main` (the
+# orchestrator's normal case) its local `main` is now one commit behind the
+# `origin/main` we just pushed, so the caller's NEXT push to `main` would be
+# rejected as non-fast-forward until it pulls. ONLY in that on-main case do we
+# fast-forward the caller's local `main` (ref + working tree) up to origin/main —
+# the sole change is a `backlog/*.md` file the caller isn't editing, so it applies
+# cleanly.
+#
+# This is strictly best-effort: the transition already succeeded and is durable on
+# the remote. If the fast-forward can't apply cleanly (uncommitted local changes,
+# a diverged local `main`, etc.) we DO NOT fail — we print a warning telling the
+# user to pull themselves and still exit 0.
+caller_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [ "$caller_branch" = "main" ]; then
+  if git merge --ff-only origin/main >/dev/null 2>&1; then
+    printf '%s: fast-forwarded local main to origin/main\n' "$prog"
+  else
+    printf '%s: warning: could not fast-forward local main (uncommitted changes or diverged local main?); run: git pull --ff-only\n' "$prog" >&2
+  fi
+fi
