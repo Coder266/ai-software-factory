@@ -2,7 +2,7 @@
 id: EXP-XEYYQL
 title: Run refine / review / QA as isolated agents
 epic: factory-v2
-status: in-progress
+status: under-review
 estimate: 4d
 created: 2026-06-21 21:22
 branch: story/step-agents-isolated
@@ -62,3 +62,4 @@ which is what lets the orchestrator drive an epic without dragging one giant con
 `in-progress` — implementing _(2026-06-22 13:41)_
 `under-review` — code review settled, handed to QA _(2026-06-22 14:19)_
 `in-progress` — QA bounce — back to fix _(2026-06-22 17:20)_
+`under-review` — code review settled, handed to QA _(2026-06-22 17:26)_
