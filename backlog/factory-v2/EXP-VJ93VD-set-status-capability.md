@@ -2,7 +2,7 @@
 id: EXP-VJ93VD
 title: Dedicated "/set-status" capability for agents
 epic: factory-v2
-status: ready
+status: in-progress
 estimate: 2d
 created: 2026-06-21 21:22
 branch: story/set-status-capability
@@ -60,4 +60,4 @@ instead of editing the file, so transitions are uniform and safe.
 
 ## Status
 
-`ready` — refined and unblocked _(2026-06-21 21:22)_
+`in-progress` — implementing on `story/set-status-capability` _(2026-06-22 09:57)_
