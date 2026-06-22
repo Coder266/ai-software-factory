@@ -2,7 +2,7 @@
 id: EXP-VJ93VD
 title: Dedicated "/set-status" capability for agents
 epic: factory-v2
-status: under-review
+status: in-progress
 estimate: 2d
 created: 2026-06-21 21:22
 branch: story/set-status-capability
@@ -60,4 +60,4 @@ instead of editing the file, so transitions are uniform and safe.
 
 ## Status
 
-`under-review` — code review settled (PR #5 approved, 0 blockers), handed to QA _(2026-06-22 10:09)_
+`in-progress` — back to fix: redesign set-status as a deterministic script (context-pollution finding on PR #5) _(2026-06-22 10:18)_
