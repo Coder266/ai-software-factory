@@ -32,8 +32,8 @@ copy-paste), then:
 - `## Scope` — **mandatory**; what's in. Include an `### Out of scope` subsection for what's
   explicitly deferred or excluded.
 - `## Acceptance Criteria` — **mandatory**; epic-level observable outcomes. Named
-  **"Acceptance Criteria"** to match the stories (not "Success criteria"), so the vocabulary is
-  consistent across epic and story docs.
+  **"Acceptance Criteria"** to match the stories, so the vocabulary is consistent across epic
+  and story docs.
 - `## Seed` — **mandatory**; the verbatim seed you gave `/refine` (e.g. a blockquote with an
   attribution line). This records *where the epic came from* so it isn't lost to the
   conversation.
