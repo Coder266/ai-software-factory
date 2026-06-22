@@ -15,7 +15,9 @@ human ships.
 - `.claude/guidelines/story-format.md` — to read the Acceptance Criteria.
 
 You may edit **exactly one thing**: a `## QA` section in the story under `backlog/`, and only
-on failure. You never edit code, never change `status`, never set `done` or merge.
+on failure — inserted **immediately above the final `## Status` block** (never appended at
+end-of-file; `## Status` stays last). You never edit code, never change `status` (the
+implementer does that via `/set-status`), never set `done` or merge.
 
 ## Steps
 1. Read `CLAUDE.md`, `reviews.md`, and `code.md`.
@@ -27,6 +29,8 @@ on failure. You never edit code, never change `status`, never set `done` or merg
    acceptance criterion (use `testdata/sample_statement.csv`, never real data). Judge each
    pass/fail with concrete evidence.
 5. **Record per `reviews.md`:** all pass → report PASS, write nothing, leave `under-review`;
-   any failure → append/replace the `## QA` section, leave `status` untouched.
+   any failure → insert/replace the `## QA` section **immediately above the final `## Status`
+   block**, leave `status` untouched (the implementer moves it back to `in-progress` via
+   `/set-status`).
 
 End your turn with a summary: PASS, or the count of failing criteria.

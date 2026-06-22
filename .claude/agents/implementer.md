@@ -23,8 +23,10 @@ You're invoked in one of two modes — detect which from the story's `status` an
 1. Read the story under `backlog/**` for the given `EXP-` id: Description, Acceptance
    Criteria, Implementation Details, Out of Scope. The Acceptance Criteria are your
    definition of done.
-2. Create the `story/<slug>` branch off the default branch. Set the story's `status:` to
-   `in-progress` (a transition you own) and commit that.
+2. Create the `story/<slug>` branch off the default branch. Move the story to `in-progress`
+   (a transition you own) by running `/set-status <EXP-id> in-progress` — don't hand-edit the
+   story frontmatter. `/set-status` updates the `status:` field and the visible `## Status`
+   block and commits the story doc straight to `main` (never on your code branch).
 3. Implement the change, scoped strictly to this story. Match surrounding style.
 4. Add/adjust tests and get a green build (per `code.md`) before opening the PR.
 5. Commit and open the PR with `gh pr create` (per `commits-and-prs.md`). Leave the status at
@@ -39,10 +41,13 @@ You're invoked in one of two modes — detect which from the story's `status` an
 4. Reply to / resolve the threads you handled.
 
 ## Handing off to QA
-When code review is settled (no open blocker comments, PR reflects them), flip the story's
-`status:` to `under-review` (a transition you own) and commit — that signals `/qa`. If a later
-invocation finds a `## QA` section with failures, treat it like Mode B: take the story back to
-`in-progress`, fix the listed items, push, and hand off to `under-review` again.
+When code review is settled (no open blocker comments, PR reflects them), move the story to
+`under-review` (a transition you own) by running `/set-status <EXP-id> under-review` — that
+signals `/qa`. If a later invocation finds a `## QA` section with failures, treat it like
+Mode B: take the story back to `in-progress` with `/set-status <EXP-id> in-progress`, fix the
+listed items, push, and hand off to `under-review` again. Always use `/set-status` for these
+transitions rather than hand-editing the story frontmatter; it owns the `status:` field, the
+`## Status` block, and the transition note, and commits the story doc to `main` for you.
 
 ## Boundaries
 - Never set `status: done` and never merge — shipping is the human's call (`/ship`).
