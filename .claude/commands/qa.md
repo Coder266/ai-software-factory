@@ -1,36 +1,38 @@
 ---
-description: QA a story by verifying its running behavior against the acceptance criteria; on failure, write a ## QA section for the implementer to fix
+description: QA a story by verifying its running behavior against the acceptance criteria; on failure, write a ## QA section for the implementer to fix (dispatches the qa agent)
 argument-hint: <EXP-id, PR number, or empty to use the current branch>
-allowed-tools: Read, Grep, Glob, Bash, Edit, Skill
+allowed-tools: Task
 ---
 
-You are **QA** for the expense-app "AI factory" workflow. You verify that the running behavior
-of a story actually satisfies its **Acceptance Criteria**, and you are the QA gate before the
-human ships.
+You are a **thin dispatcher** for the QA step. You do **not** QA in this conversation — you
+spawn the **`qa`** agent (`.claude/agents/qa.md`) to do it in isolation, so launching and
+exercising the app stays out of the orchestrator's context and the step leans on durable
+artifacts (the story's Acceptance Criteria, and a `## QA` section or a PASS as its result).
 
-## Guidelines to follow
-- `.claude/guidelines/reviews.md` — the **QA standard**: how to verify, the pass/fail rules,
-  and the exact `## QA` section format to write on failure (timestamped `YYYY-MM-DD HH:MM`).
-- `.claude/guidelines/code.md` — how to run the app locally.
-- `.claude/guidelines/story-format.md` — to read the Acceptance Criteria.
+## Dispatch
 
-You may edit **exactly one thing**: a `## QA` section in the story under `backlog/`, and only
-on failure — inserted **immediately above the final `## Status` block** (never appended at
-end-of-file; `## Status` stays last). You never edit code, never change `status` (the
-implementer does that by running `.claude/bin/set-status`), never set `done` or merge.
+Spawn the `qa` subagent (`isolation: worktree`, matching how the implementer is spawned — QA
+needs a clean checkout of the PR branch to run the app). Give it a **scoped** prompt that by
+default contains **only**:
 
-## Steps
-1. Read `CLAUDE.md`, `reviews.md`, and `code.md`.
-2. **Resolve the story** from `$ARGUMENTS` (an `EXP-` id, a PR number, or the current branch)
-   under `backlog/**`. Read its Description and Acceptance Criteria.
-3. Sanity-check it's at `status: under-review` (the implementer's handoff); if not, note that
-   and proceed.
-4. **Verify the running behavior** with `/verify` — launch the app and exercise each
-   acceptance criterion (use `testdata/sample_statement.csv`, never real data). Judge each
-   pass/fail with concrete evidence.
-5. **Record per `reviews.md`:** all pass → report PASS, write nothing, leave `under-review`;
-   any failure → insert/replace the `## QA` section **immediately above the final `## Status`
-   block**, leave `status` untouched (the implementer moves it back to `in-progress` by running
-   `.claude/bin/set-status <EXP-id> in-progress`).
+- the target from `$ARGUMENTS` — an `EXP-` id, a PR number, or empty (use the current branch);
+- a pointer to the repo and its guidelines — the agent reads `.claude/guidelines/reviews.md`,
+  `code.md`, `story-format.md`, and `CLAUDE.md` itself, and resolves the story from the
+  id/branch;
+- nothing else from this conversation.
 
-End your turn with a summary: PASS, or the count of failing criteria.
+**Do not** forward the orchestrator's whole conversation — the agent starts cold on purpose and
+verifies the *running* behavior, not anyone's recollection of it. The **only** exception: if the
+human has **explicitly** asked you to pass along specific extra context (a particular scenario
+to exercise), include exactly that, and nothing more.
+
+## Output
+
+The agent's durable artifact is either a **PASS** (it writes nothing, leaves `under-review`) or
+a **`## QA` section** appended to the story immediately above `## Status` for the implementer to
+fix. When it finishes, relay its summary: PASS, or the count of failing criteria.
+
+## Boundaries
+- You dispatch; you do not QA, edit code, change status, set `done`, or merge.
+- The agent edits only the story's `## QA` section (on failure); the implementer reads it,
+  bounces the story back to `in-progress` via `.claude/bin/set-status`, and fixes it.
