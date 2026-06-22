@@ -2,7 +2,7 @@
 id: EXP-FAEXWN
 title: Epics get a definition and a status lifecycle
 epic: factory-v2
-status: in-progress
+status: under-review
 estimate: 3d
 created: 2026-06-21 21:22
 branch: story/epic-definition-lifecycle
