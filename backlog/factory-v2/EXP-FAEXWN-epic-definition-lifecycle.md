@@ -2,10 +2,11 @@
 id: EXP-FAEXWN
 title: Epics get a definition and a status lifecycle
 epic: factory-v2
-status: under-review
+status: done
 estimate: 3d
 created: 2026-06-21 21:22
 branch: story/epic-definition-lifecycle
+pr: https://github.com/Coder266/expense-app/pull/4
 ---
 
 # EXP-FAEXWN — Epics get a definition and a status lifecycle
@@ -60,3 +61,5 @@ It also formalizes the ad-hoc `retro-notes.md` convention (mid-epic human feedba
 
 `ready` — refined and unblocked _(2026-06-21 21:22)_
 `in-progress` — implementing on `story/epic-definition-lifecycle` (PR #4) _(2026-06-22 08:40)_
+`under-review` — PR #4 approved _(2026-06-22 09:42)_
+`done` — shipped via PR #4 (squash-merged to `main`) _(2026-06-22 09:52)_
