@@ -2,10 +2,11 @@
 id: EXP-XEYYQL
 title: Run refine / review / QA as isolated agents
 epic: factory-v2
-status: under-review
+status: done
 estimate: 4d
 created: 2026-06-21 21:22
 branch: story/step-agents-isolated
+pr: https://github.com/Coder266/expense-app/pull/6
 ---
 
 # EXP-XEYYQL — Run refine / review / QA as isolated agents
@@ -63,3 +64,4 @@ which is what lets the orchestrator drive an epic without dragging one giant con
 `under-review` — code review settled, handed to QA _(2026-06-22 14:19)_
 `in-progress` — QA bounce — back to fix _(2026-06-22 17:20)_
 `under-review` — code review settled, handed to QA _(2026-06-22 17:26)_
+`done` — shipped via PR #6 _(2026-06-22 17:54)_
