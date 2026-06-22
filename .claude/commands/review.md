@@ -1,35 +1,41 @@
 ---
-description: Review a story's PR against its acceptance criteria and post findings as GitHub PR comments
+description: Review a story's PR against its acceptance criteria and post findings as GitHub PR comments (dispatches the review agent)
 argument-hint: <EXP-id, PR number, or empty to use the current branch>
-allowed-tools: Read, Grep, Glob, Bash, Skill
+allowed-tools: Task
 ---
 
-You are the **Reviewer** for the expense-app "AI factory" workflow. You review the PR for a
-single story and leave your findings as **GitHub PR comments**, reusing the existing
-`/code-review` skill with acceptance-criteria awareness.
+You are a **thin dispatcher** for the Review step. You do **not** review in this conversation —
+you spawn the **`review`** agent (`.claude/agents/review.md`) to do it in isolation, so the
+review's static analysis stays out of the orchestrator's context and the step leans on durable
+artifacts (the PR diff, the story's Acceptance Criteria, and the GitHub PR comments it posts).
 
-## Guidelines to follow
-- `.claude/guidelines/reviews.md` — the code-review standard: what to check, and the hard
-  rule that your **only** output is GitHub PR comments (no editing code or the story, no
-  status changes, no `--fix`).
-- `.claude/guidelines/story-format.md` — to read the story's Acceptance Criteria, your rubric.
+## Dispatch
 
-You have no `Edit`/`Write` tool; keep `Bash` read-only except for the `gh` calls that post
-comments. You don't fix anything — the implementer addresses your comments.
+Spawn the `review` subagent (`isolation: worktree`, matching how the implementer is spawned —
+to keep the review's static analysis isolated from the orchestrator's working tree). The review
+itself is **`gh`-driven**: `agents/review.md` step 4 runs `/code-review high --comment <PR#>`,
+which gathers the PR diff from GitHub by PR number rather than the local tree, so it does **not**
+depend on which branch the worktree is on. (Contrast the qa agent, which *does* check out the PR
+branch because it runs the app.) Give it a **scoped** prompt that by default contains **only**:
 
-## Steps
-1. Read `CLAUDE.md` and `reviews.md`.
-2. **Resolve the target** from `$ARGUMENTS`:
-   - an `EXP-` id → find its story under `backlog/**`, then its PR via the `branch:` field
-     (`gh pr list --head story/<slug>`);
-   - a PR number → use it, find the story by its branch;
-   - empty → current branch (`git branch --show-current`) and its PR (`gh pr view`).
-3. Read the story's Description, Acceptance Criteria, and Out of Scope — your rubric.
-4. Run `/code-review high --comment <PR#>`, framed by that rubric (per `reviews.md`: judge
-   each criterion met/unmet/unclear, plus correctness, edge cases, scope creep, conventions,
-   sensitive data).
-5. If acceptance-criteria coverage is unclear, say so as a top-level PR comment.
+- the target from `$ARGUMENTS` — an `EXP-` id, a PR number, or empty (use the current branch);
+- a pointer to the repo and its guidelines — the agent reads `.claude/guidelines/reviews.md`,
+  `story-format.md`, and `CLAUDE.md` itself, and resolves the story and PR from the id/branch;
+- nothing else from this conversation.
 
-End your turn (and post a PR summary comment) with: a one-line verdict
-(`Approved` / `Changes requested` / `Needs discussion`), the count of blocker findings, and a
-per-criterion `met / unmet / unclear` list. You don't move the status — the implementer does.
+**Do not** forward the orchestrator's whole conversation — the agent starts cold on purpose and
+reconstructs everything from the story doc and the PR. The **only** exception: if the human has
+**explicitly** asked you to pass along specific extra context (a particular concern to focus
+on, a constraint), include exactly that, and nothing more.
+
+## Output
+
+The agent's durable artifact is its **GitHub PR comments** (it never edits code or the story,
+never changes status). When it finishes, relay its summary: the one-line verdict
+(`Approved` / `Changes requested` / `Needs discussion`), the blocker-finding count, and the
+per-criterion `met / unmet / unclear` list.
+
+## Boundaries
+- You dispatch; you do not review, edit code or the story, change status, or merge.
+- The agent posts PR comments only; the implementer (not the reviewer) addresses them and moves
+  the status via `.claude/bin/set-status`.

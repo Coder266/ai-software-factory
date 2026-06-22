@@ -12,7 +12,9 @@ Review the PR diff against the story's **Acceptance Criteria**:
 
 ## QA (`/qa`)
 Verify the *running* behavior against each acceptance criterion, with concrete evidence
-(what you did, observed vs. expected). Use `testdata/sample_statement.csv`, never real data.
+(what you did, observed vs. expected). Use or create suitable synthetic test data under
+`testdata/` for the scenario, never real bank data, and never write a `*.csv` outside
+`testdata/`.
 - **Test the story the way a real user would exercise it** — whatever that means for the
   story: click through the UI, hit endpoints with `curl`, run the CLI, rebuild the
   devcontainer, etc. The QA environment can run the real thing (including Docker), so drive
