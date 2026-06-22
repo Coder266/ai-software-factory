@@ -2,7 +2,7 @@
 id: EXP-XEYYQL
 title: Run refine / review / QA as isolated agents
 epic: factory-v2
-status: ready
+status: in-progress
 estimate: 4d
 created: 2026-06-21 21:22
 branch: story/step-agents-isolated
@@ -59,3 +59,4 @@ which is what lets the orchestrator drive an epic without dragging one giant con
 ## Status
 
 `ready` — refined and unblocked _(2026-06-21 21:22)_
+`in-progress` — implementing _(2026-06-22 13:41)_
