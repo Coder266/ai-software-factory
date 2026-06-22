@@ -34,13 +34,43 @@ Because the step agents are isolated ([`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isol
 - [ ] Given a fresh `/factory` invocation, when it determines next steps, then it can reconstruct where each story stands from story `status` and `epic.md` alone (it does **not depend on** prior conversation) — while remaining free to pass along extra context the human explicitly provides.
 - [ ] Given the review→fix→QA loop for a story, when review or QA produce findings, then `/factory` routes them to the **same implementer agent kept alive** (so fixes reuse the original implementation context) — falling back to a freshly spawned implementer that rebuilds context from the PR diff + story + comments if that live session is gone (e.g. after a long human pause).
 - [ ] Given a PR with open automated-review comments, when `/factory` runs, then it auto-loops review→fix and only surfaces to the human when no comments remain — and pauses at ship — matching today's documented routing rules.
+- [ ] Given the repo, when you look in `.claude/commands/`, then `refine.md`, `review.md`, and `qa.md` are **gone** (dispatch happens directly inside `/factory`), while `set-status.md`, `ship.md`, and `retro.md` remain; `agents/README.md`'s "dispatched by" column reflects direct `/factory` dispatch.
+
+## Resolved decision — drop the thin step-command wrappers
+
+The open question carried over from PR #6 (see this epic's `retro-notes.md`) — *do we still need
+the `/refine` `/review` `/qa` command dispatchers, or can `/factory` call the agents directly?* —
+is **resolved: drop them.** `/factory` dispatches the `refine`, `review`, and `qa` agents
+**directly**, the same way the orchestrator already spawns the `implementer` (which never had a
+command). Rationale (human, 2026-06-22):
+
+- **Duplication.** The dispatch mechanics are currently scattered across three places — the
+  command body, the agent's `description:` frontmatter, and the `agents/README.md` table.
+  Collapsing to direct dispatch lets the per-step nuance live in **one** compact dispatch table.
+- **Orchestrator context.** A slash command's body is injected into the **caller's** context, so
+  routing `/factory` → `/review` would load dispatcher prose into the orchestrator every loop.
+  Direct dispatch keeps the heavy prose in the **subagent**; the orchestrator keeps only a
+  compact rule. The human only ever invokes steps via `/factory`, so the wrappers earned no
+  offsetting manual-use benefit.
+- **Keep** `/set-status` (thin wrapper over the deterministic `.claude/bin/set-status` script),
+  `/ship` (human-gated entry point), and `/retro` (human-invoked entry point) — those are real
+  entry points, not redundant step-wrappers.
+
+This **partially reverses** [`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isolated.md), which deliberately
+kept the command layer and deferred this exact call to this story.
 
 ## Implementation Details
 
 - Move the "Orchestrator guidelines" + routing rules out of `CLAUDE.md` into the `/factory`
   skill; keep `CLAUDE.md` as repo/stack/sensitive-data facts + a one-line pointer.
-- `/factory` dispatches the step agents from [`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isolated.md) and transitions status via
-  `/set-status` from [`EXP-VJ93VD`](EXP-VJ93VD-set-status-capability.md).
+- **Delete** `.claude/commands/{refine,review,qa}.md`. `/factory` dispatches the `refine`,
+  `review`, and `qa` agents from [`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isolated.md) **directly**
+  (matching how `implementer` is spawned), driven by a single compact **dispatch table** inside
+  the `/factory` skill: per step → agent name, `isolation` (worktree vs `main`), any pre-step
+  (e.g. qa checks out the PR's `story/<slug>` branch first), and the scoped-prompt rule. Fold the
+  per-step mechanics currently in the command bodies into that table and `agents/README.md` so
+  the nuance lives in one place; update `agents/README.md`'s "dispatched by" column accordingly.
+- Status transitions still go through `/set-status` from [`EXP-VJ93VD`](EXP-VJ93VD-set-status-capability.md).
 - **Keep the implementer alive** across a story's review/fix/QA loop — resume it with
   `SendMessage` so each fix carries the original implementation context. If that session is no
   longer available (e.g. a long human-review pause spanned it), spawn a fresh implementer that

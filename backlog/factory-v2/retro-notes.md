@@ -48,9 +48,14 @@ rules in the guidelines/agents/commands.
   `testdata/`). Applied now to `agents/qa.md` + `reviews.md`. _Source: human, 2026-06-22 (PR #6,
   [`EXP-XEYYQL`](EXP-XEYYQL-step-agents-isolated.md))._
 
-- **Open question for [`EXP-0IOKY4`](EXP-0IOKY4-orchestrator-as-skill.md): do we even need the
-  `/refine` `/review` `/qa` command dispatchers, or can the orchestrator/`/factory` skill call
-  the agents directly?** Raised by the human on PR #6; the command layer was **kept** in
-  `EXP-XEYYQL` and the decision deferred to the orchestrator-as-`/factory` story, which owns how
-  steps get invoked. `EXP-0IOKY4` must explicitly resolve whether the thin command layer earns
-  its keep. _Source: human, 2026-06-22._
+- **RESOLVED (2026-06-22) — drop the `/refine` `/review` `/qa` command dispatchers.** The open
+  question from PR #6 (kept the command layer in `EXP-XEYYQL`, deferred here) is decided: the thin
+  wrappers **do not** earn their keep. `/factory` will dispatch the `refine`/`review`/`qa` agents
+  **directly** (like the `implementer`, which never had a command), via one compact dispatch table;
+  the wrappers get deleted. Reasons: the dispatch nuance was duplicated across command body + agent
+  `description` + `agents/README.md`, and routing `/factory`→`/command` injects dispatcher prose
+  into the orchestrator's own context (the human only invokes steps through `/factory`, so the
+  wrappers bought no manual-use benefit). `/set-status`, `/ship`, `/retro` stay (real entry points).
+  Folded into [`EXP-0IOKY4`](EXP-0IOKY4-orchestrator-as-skill.md). At `/retro`, fold this into the
+  agents/commands README + `CLAUDE.md` routing so the durable convention is "`/factory` dispatches
+  step agents directly." _Source: human, 2026-06-22._
