@@ -14,5 +14,6 @@ the app.
   `frontend/`. Never open a PR on a red build.
 - **Scope:** keep the diff to one story; defer unrelated cleanups to their own story.
 - **Sensitive data (hard rule):** never commit real bank statements or any `*.csv` outside
-  `testdata/`. Use `testdata/sample_statement.csv` for development and QA. (See the
+  `testdata/`. Prefer `testdata/sample_statement.csv` as the development default; for QA, use
+  or create suitable synthetic test data under `testdata/` for the scenario. (See the
   "Sensitive data" section of `CLAUDE.md`.)
