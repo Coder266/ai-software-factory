@@ -2,7 +2,7 @@
 id: EXP-FAEXWN
 title: Epics get a definition and a status lifecycle
 epic: factory-v2
-status: ready
+status: in-progress
 estimate: 3d
 created: 2026-06-21 21:22
 branch: story/epic-definition-lifecycle
@@ -59,3 +59,4 @@ It also formalizes the ad-hoc `retro-notes.md` convention (mid-epic human feedba
 ## Status
 
 `ready` — refined and unblocked _(2026-06-21 21:22)_
+`in-progress` — implementing on `story/epic-definition-lifecycle` (PR #4) _(2026-06-22 08:40)_
