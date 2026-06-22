@@ -1,0 +1,349 @@
+#!/usr/bin/env bash
+#
+# set-status — deterministically advance a backlog story's status one legal step
+# along the AI-factory lifecycle, keeping the frontmatter `status:` field and the
+# visible `## Status` block in sync, and committing the story doc to `main`.
+#
+# Usage: .claude/bin/set-status <EXP-id> <new-status>
+#   e.g. .claude/bin/set-status EXP-VJ93VD in-progress
+#
+# The legal transition table mirrors .claude/guidelines/story-format.md. This is
+# deterministic plumbing on purpose: no LLM re-derives the lifecycle.
+#
+# Branch safety + single source of truth: the story-doc commit must land on `main`
+# regardless of which branch is checked out, because this script is invoked both
+# from `main` (the orchestrator) AND from a `story/<slug>` code branch (the
+# implementer/qa, which create the code branch *then* flip status). To stay
+# independent of the caller's branch and working tree, the current status is READ
+# FROM, validated against, and edited on a throwaway git worktree checked out on a
+# freshly fetched `origin/main`; the commit+push happen there too. `main` is the
+# single source of truth: the caller's local `backlog/` copy is intentionally
+# ignored for the decision because on a code branch it is frozen at branch-creation
+# time and goes stale the moment a transition lands on `main` (so e.g. the normal
+# in-progress -> under-review handoff works even though the branch copy still says
+# the older status). The caller's branch never gains a commit and its working tree
+# is never touched; only the single story-doc commit lands on `origin/main`.
+#
+# One ergonomic exception: when the caller's checkout is itself ON `main` (the
+# orchestrator's normal case), after the push the script best-effort fast-forwards
+# the caller's local `main` up to the just-pushed `origin/main` so the caller's
+# next push isn't rejected as non-fast-forward. This is done ONLY when on `main`
+# (never on a story branch / detached HEAD — branch safety is preserved) and never
+# fails the command: if it can't fast-forward cleanly it warns and still exits 0.
+#
+# Exit codes: 0 success; non-zero on usage error, rejected/refused transition,
+# or commit failure. On any rejection/refusal the story file is left UNCHANGED.
+#
+# Environment knobs (for testing):
+#   SET_STATUS_NO_COMMIT=1  — update the in-repo story file in place, skip the
+#                             worktree/commit/push entirely (no remote needed).
+#   SET_STATUS_NO_PUSH=1     — do the worktree edit+commit on a local `main`, but
+#                             skip the final `git push` (no remote needed; falls
+#                             back to the local `main` branch when `origin/main`
+#                             can't be fetched).
+
+set -euo pipefail
+
+prog="$(basename "$0")"
+
+die() { printf '%s: %s\n' "$prog" "$1" >&2; exit "${2:-1}"; }
+
+usage() {
+  cat >&2 <<EOF
+usage: $prog <EXP-id> <new-status>
+
+  <EXP-id>      story id, e.g. EXP-VJ93VD
+  <new-status>  target status: ready | in-progress | under-review
+
+Legal transitions (mirrors story-format.md):
+  new -> ready
+  ready -> in-progress
+  in-progress -> under-review
+  under-review -> in-progress   (QA bounce)
+
+'done' is never set here — that's /ship, as part of an actual merge.
+EOF
+  exit 2
+}
+
+# --- arg parsing -------------------------------------------------------------
+[ $# -eq 2 ] || usage
+id="$1"
+target="$2"
+
+case "$id" in
+  EXP-*) ;;
+  *) die "first argument must be an EXP- story id (got '$id')" 2 ;;
+esac
+
+# --- resolve repo root (don't depend on caller CWD) --------------------------
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" \
+  || die "not inside a git repository"
+cd "$repo_root"
+
+# --- refuse -> done up front -------------------------------------------------
+if [ "$target" = "done" ]; then
+  die "refusing to set '$id' to 'done' — 'done' is set only by /ship as part of a merge"
+fi
+
+# --- validate target is a known status ---------------------------------------
+case "$target" in
+  ready|in-progress|under-review) ;;
+  new) die "'new' is authored by /refine, not a /set-status target" ;;
+  *) die "unknown target status '$target' (expected: ready | in-progress | under-review)" ;;
+esac
+
+# --- locate the story file (for the path; the status VALUE comes from main) ---
+# We locate the story under the caller's backlog/ only to confirm the id exists
+# and to surface a friendly path in messages. The authoritative current status
+# and the file we actually transform come from the base (origin/main) copy read
+# inside the throwaway worktree below — `main` is the single source of truth.
+# On a `story/<slug>` code branch the caller's backlog/ copy is frozen at branch
+# creation, so it may be stale (or, for the NO_COMMIT test path, it is the only
+# copy). It must not factor into the transition decision on the commit path.
+mapfile -t matches < <(find backlog -type f -name "${id}-*.md" 2>/dev/null)
+case "${#matches[@]}" in
+  0) die "no story file found for '$id' under backlog/" ;;
+  1) story="${matches[0]}" ;;
+  *) die "ambiguous: multiple story files match '$id': ${matches[*]}" ;;
+esac
+
+# --- read current status from a story file's frontmatter ---------------------
+# Frontmatter is the first `---` ... `---` block; the status: line lives inside.
+read_status() {
+  awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---" { exit }
+    infm && /^status:[[:space:]]*/ {
+      sub(/^status:[[:space:]]*/, "")
+      gsub(/[[:space:]]+$/, "")
+      print
+      exit
+    }
+  ' "$1"
+}
+
+# --- validate the transition against the legal table -------------------------
+# Given the current status (the source of truth — from main on the commit path,
+# from the in-repo file only on the NO_COMMIT path), return cleanly if the step
+# to $target is legal, else die with a message naming the legal next step.
+validate_transition() {
+  local cur="$1" legal=0
+  case "$cur->$target" in
+    "new->ready") legal=1 ;;
+    "ready->in-progress") legal=1 ;;
+    "in-progress->under-review") legal=1 ;;
+    "under-review->in-progress") legal=1 ;;
+  esac
+  [ "$legal" -eq 1 ] && return 0
+
+  local next
+  case "$cur" in
+    new)          next="ready" ;;
+    ready)        next="in-progress" ;;
+    in-progress)  next="under-review" ;;
+    under-review) next="in-progress (QA bounce)" ;;
+    done)         next="<none — 'done' is terminal>" ;;
+    *)            next="<unknown current status>" ;;
+  esac
+  die "illegal transition for $id: '$cur' -> '$target'. From '$cur' the only legal next step is: $next. (File left unchanged.)"
+}
+
+# --- compute timestamp + note ------------------------------------------------
+# The timestamp is independent of the current status; the human-readable note
+# depends on it (so it's set once `current` is known, via note_for <cur>).
+ts="$(date '+%Y-%m-%d %H:%M')"
+note=""
+note_for() {
+  local cur="$1"
+  case "$target" in
+    ready)        note="refined and unblocked" ;;
+    in-progress)
+      if [ "$cur" = "under-review" ]; then note="QA bounce — back to fix"
+      else note="implementing"; fi ;;
+    under-review) note="code review settled, handed to QA" ;;
+  esac
+}
+
+# --- the file transformation -------------------------------------------------
+# Apply the status edit to a story file IN PLACE, atomically. We update exactly
+# two things:
+#   1. the frontmatter `status:` line
+#   2. the `## Status` block: append the new timestamped line as its last line
+#      (preserving the prior history lines).
+# Nothing else (code, pr:, other frontmatter, other sections) is touched. The
+# `## QA` section, if present, stays directly above `## Status`. Exits non-zero
+# (leaving the source untouched) if the result's frontmatter isn't the target.
+transform_story() {
+  local src="$1" tmp
+  tmp="$(mktemp "${src}.XXXXXX")"
+
+  awk -v target="$target" -v ts="$ts" -v note="$note" '
+    function flush_status() {
+      # emit the accumulated ## Status block, trimming trailing blanks, then the
+      # new status line.
+      end = status_n
+      while (end > 0 && status[end] ~ /^[[:space:]]*$/) end--
+      for (i = 1; i <= end; i++) print status[i]
+      print "`" target "` — " note " _(" ts ")_"
+      in_status = 0
+      status_n = 0
+    }
+    BEGIN { infm=0; fm_done=0; in_status=0; status_n=0; status_seen=0 }
+
+    # --- frontmatter handling ---
+    NR==1 && $0=="---" { infm=1; print; next }
+    infm && $0=="---" { infm=0; fm_done=1; print; next }
+    infm && /^status:[[:space:]]*/ { print "status: " target; next }
+    infm { print; next }
+
+    # --- ## Status section accumulation ---
+    in_status && /^## / {
+      # another heading after ## Status (should not normally happen since Status
+      # is last) — flush what we have and fall through to print this heading.
+      flush_status()
+    }
+    in_status {
+      status[++status_n] = $0
+      next
+    }
+    /^## Status[[:space:]]*$/ {
+      in_status = 1
+      status_seen = 1
+      print
+      next
+    }
+
+    { print }
+
+    END {
+      if (in_status) flush_status()
+      else if (!status_seen) {
+        # No ## Status section existed — create one as the final section.
+        print ""
+        print "## Status"
+        print ""
+        print "`" target "` — " note " _(" ts ")_"
+      }
+    }
+  ' "$src" > "$tmp"
+
+  # sanity: the new frontmatter status must be the target
+  local new_fm
+  new_fm="$(awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---" { exit }
+    infm && /^status:[[:space:]]*/ { sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]+$/,""); print; exit }
+  ' "$tmp")"
+  if [ "$new_fm" != "$target" ]; then
+    rm -f "$tmp"
+    die "internal error: frontmatter not updated to '$target'"
+  fi
+
+  mv "$tmp" "$src"
+}
+
+msg="$id: set status $target
+
+Generated with Claude Opus 4.8"
+
+# --- NO_COMMIT: edit the in-repo file in place, skip git entirely -------------
+# This path has no `main` to read from, so the in-repo file IS the source of
+# truth: read current status from it, validate, and transform it in place. It
+# mutates the caller's working tree on purpose (tests assert on it) and needs no
+# remote. It is NOT used in normal operation.
+if [ "${SET_STATUS_NO_COMMIT:-}" = "1" ]; then
+  current="$(read_status "$story")"
+  [ -n "$current" ] || die "could not read a 'status:' field from $story"
+  validate_transition "$current"
+  note_for "$current"
+  transform_story "$story"
+  printf '%s: %s -> %s in %s (file updated, commit skipped)\n' "$prog" "$current" "$target" "$story"
+  exit 0
+fi
+
+# --- commit (and push) to main via a throwaway worktree ----------------------
+# `main` is the single source of truth. We check out a fresh `main` in an
+# isolated, detached worktree and read the current status, validate the
+# transition, and apply the edit ALL against that copy — never the caller's
+# working copy, which on a `story/<slug>` code branch is frozen at branch
+# creation and therefore stale. Neither the caller's branch nor its working tree
+# is touched; only the single story-doc commit lands on `main`. We fetch
+# origin/main when a remote exists; otherwise (e.g. NO_PUSH tests with no remote)
+# we fall back to the local `main` branch.
+wt=""
+cleanup() { [ -n "$wt" ] && git worktree remove "$wt" --force >/dev/null 2>&1; }
+trap cleanup EXIT
+
+base=""
+if git remote get-url origin >/dev/null 2>&1 && git fetch -q origin main 2>/dev/null; then
+  base="origin/main"
+elif git show-ref --verify --quiet refs/heads/main; then
+  base="main"
+else
+  die "cannot resolve a 'main' to commit onto (no fetchable origin/main and no local main branch)"
+fi
+
+wt="$(mktemp -d)"
+git worktree add -q --detach "$wt" "$base" \
+  || die "could not create worktree on $base"
+
+# Locate the story directly under the freshly-checked-out main's backlog/. This
+# is authoritative even for a story that exists on main but whose caller-side
+# path we discovered above (the two normally match).
+mapfile -t wt_matches < <(find "$wt/backlog" -type f -name "${id}-*.md" 2>/dev/null)
+case "${#wt_matches[@]}" in
+  0) die "story '$id' not found under backlog/ on $base" ;;
+  1) wt_story="${wt_matches[0]}" ;;
+  *) die "ambiguous: multiple story files match '$id' on $base: ${wt_matches[*]}" ;;
+esac
+
+# Derive current status from MAIN's copy and validate the transition from it.
+# The caller's local copy is intentionally ignored: it may be stale (or absent)
+# on a code branch and must not factor into the decision.
+current="$(read_status "$wt_story")"
+[ -n "$current" ] || die "could not read a 'status:' field from $id on $base"
+validate_transition "$current"
+note_for "$current"
+
+transform_story "$wt_story"
+git -C "$wt" commit -q "$wt_story" -m "$msg" || die "git commit failed for $story on $base"
+
+if [ "${SET_STATUS_NO_PUSH:-}" = "1" ]; then
+  # Land the commit on the local `main` branch so tests can inspect it without a
+  # remote. (With a detached worktree the commit is otherwise unreferenced.)
+  new_head="$(git -C "$wt" rev-parse HEAD)"
+  git update-ref refs/heads/main "$new_head" \
+    || die "could not advance local main to the new commit"
+  printf '%s: %s: %s -> %s (committed to main, push skipped)\n' "$prog" "$id" "$current" "$target"
+  exit 0
+fi
+
+git -C "$wt" push -q origin HEAD:main || die "git push to origin main failed"
+
+printf '%s: %s: %s -> %s (committed and pushed to main)\n' "$prog" "$id" "$current" "$target"
+
+# --- best-effort: keep the caller's local `main` in sync ----------------------
+# The commit+push above happened entirely inside the throwaway worktree, so the
+# caller's own checkout is untouched — that branch-safety property is REQUIRED and
+# must hold when invoked from a `story/<slug>` branch (or detached HEAD): in that
+# case we do NOTHING here. But when the caller is itself ON `main` (the
+# orchestrator's normal case) its local `main` is now one commit behind the
+# `origin/main` we just pushed, so the caller's NEXT push to `main` would be
+# rejected as non-fast-forward until it pulls. ONLY in that on-main case do we
+# fast-forward the caller's local `main` (ref + working tree) up to origin/main —
+# the sole change is a `backlog/*.md` file the caller isn't editing, so it applies
+# cleanly.
+#
+# This is strictly best-effort: the transition already succeeded and is durable on
+# the remote. If the fast-forward can't apply cleanly (uncommitted local changes,
+# a diverged local `main`, etc.) we DO NOT fail — we print a warning telling the
+# user to pull themselves and still exit 0.
+caller_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [ "$caller_branch" = "main" ]; then
+  if git merge --ff-only origin/main >/dev/null 2>&1; then
+    printf '%s: fast-forwarded local main to origin/main\n' "$prog"
+  else
+    printf '%s: warning: could not fast-forward local main (uncommitted changes or diverged local main?); run: git pull --ff-only\n' "$prog" >&2
+  fi
+fi

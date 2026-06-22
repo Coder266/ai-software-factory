@@ -20,8 +20,10 @@ Verify the *running* behavior against each acceptance criterion, with concrete e
   job; QA's value is confirming it works when run.
 - **All pass:** report PASS; write nothing to the story; leave `status: under-review` for the
   human to ship.
-- **Any failure:** append or replace a `## QA` section at the end of the story, timestamped
-  to the minute (`YYYY-MM-DD HH:MM`):
+- **Any failure:** insert or replace a `## QA` section **immediately above the final
+  `## Status` block** (never appended at end-of-file — `## Status` stays last; see the
+  canonical section order in `story-format.md`), timestamped to the minute
+  (`YYYY-MM-DD HH:MM`):
 
   ```markdown
   ## QA
@@ -31,5 +33,6 @@ Verify the *running* behavior against each acceptance criterion, with concrete e
   ```
 
   Do **not** change the `status` — the `## QA` section is itself the signal the implementer
-  reads (it takes the story back to `in-progress` to fix). QA never edits code, never sets
-  `done`, never merges.
+  reads (the implementer takes the story back to `in-progress` by running
+  `.claude/bin/set-status <EXP-id> in-progress` to fix). QA
+  never edits code, never changes `status`, never sets `done`, never merges.

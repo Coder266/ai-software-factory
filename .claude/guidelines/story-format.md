@@ -47,22 +47,88 @@ Timestamps are always date **and** time to the minute (`YYYY-MM-DD HH:MM`).
 - `## Out of Scope` — optional but encouraged; keeps the story small.
 - `## Dependencies` — optional; other story ids / prerequisites.
 - `## Open Questions` — optional; if a question is *blocking*, the story is `new`, not `ready`.
-- `## QA` — added by `/qa` only on failure (see `reviews.md`).
+- `## QA` — added by `/qa` only on failure (see `reviews.md`); placed **immediately above**
+  the final `## Status` block.
+- `## Status` — **mandatory; always the final section.** A visible block that mirrors the
+  frontmatter `status:`, so the current status is readable without parsing frontmatter. See
+  below.
+
+### Canonical section order
+The narrative sections come first (Description → Acceptance Criteria → Implementation Details →
+Out of Scope → Dependencies → Open Questions). The story then **always ends** with, in this
+order:
+
+1. `## QA` — only if `/qa` has recorded a failure (otherwise absent);
+2. `## Status` — the **last** section, every time.
+
+`## QA` therefore sits **immediately above** `## Status` and never pushes it out of last
+position.
+
+### The `## Status` block
+`## Status` is a visible, **append-only history** of the story's lifecycle, kept in sync with
+the frontmatter `status:` field by the `.claude/bin/set-status` script (and finalized to `done`
+by `/ship`). It is the story's final section. `/refine` seeds it with one line; every
+transition **appends** a new timestamped line, so the block reads newest-last and the full
+history is browseable on GitHub. The **last line always mirrors the current frontmatter
+`status:`**. It reads:
+
+```markdown
+## Status
+
+`ready` — refined and unblocked _(2026-06-20 09:15)_
+`in-progress` — implementing _(2026-06-21 14:02)_
+`under-review` — code review settled, handed to QA _(2026-06-22 11:30)_
+```
+
+- Each line's backticked word is a status; the **last** line matches the frontmatter `status:`
+  exactly.
+- The note is a brief human description of that transition (e.g. `refined and unblocked`,
+  `implementing`, `code review settled, handed to QA`).
+- The timestamp is to the minute (`YYYY-MM-DD HH:MM`).
+- Lines are appended, never rewritten — the block is the story's status log. This mirrors how
+  `/ship` adds its `done` line on merge.
+
+**Status changes are made through the `.claude/bin/set-status` script, not by hand-editing
+frontmatter.** The script is the single executable source of truth for the lifecycle: agents
+invoke it in **one bash line** (`.claude/bin/set-status <EXP-id> <new-status>`) and it
+deterministically validates the move against the legal table below, edits the `status:` field
+and this block in sync, adds the timestamped note, and commits the story doc to `main` — so the
+two never drift and the table is never re-derived by an LLM. The `/set-status` command is just a
+thin wrapper around the script. The only exceptions are `/refine` (which authors the initial
+block when creating a story) and `/ship` (which sets `done`). See `commits-and-prs.md` for the
+commit flow.
 
 ## Status lifecycle
-| status | meaning | set by |
-|--------|---------|--------|
-| `new` | captured but has a blocking open question | `/refine` |
-| `ready` | description + criteria complete, unblocked | `/refine` |
-| `in-progress` | implementing **and** code review (multiple comment→fix rounds on the one PR) | implementer (on start) |
-| `under-review` | code review settled; handed off to QA | implementer (handoff) |
-| `done` | merged / shipped | the human (ship) |
+| status | meaning | reached by (who decides) |
+|--------|---------|--------------------------|
+| `new` | captured but has a blocking open question | `/refine` (authors the story) |
+| `ready` | description + criteria complete, unblocked | `/refine` (authors the story) |
+| `in-progress` | implementing **and** code review (multiple comment→fix rounds on the one PR) | implementer, via `.claude/bin/set-status <id> in-progress` |
+| `under-review` | code review settled; handed off to QA | implementer, via `.claude/bin/set-status <id> under-review` |
+| `done` | merged / shipped | the human, via `/ship` (never `set-status`) |
 
+The legal transitions are exactly:
+
+```
+new → ready → in-progress → under-review → in-progress (QA bounce) … → done
+```
+
+i.e. `new→ready`, `ready→in-progress`, `in-progress→under-review`, and the QA bounce
+`under-review→in-progress`. `→ done` is set **only** by `/ship`, as part of an actual merge.
+Any other jump (skipping a stage, illegal backward move) is invalid.
+
+- **Status changes go through the `.claude/bin/set-status` script,** invoked in one bash line
+  (`.claude/bin/set-status <EXP-id> <new-status>`). It deterministically validates the transition
+  against the table above (rejecting illegal jumps with the file left unchanged, and refusing
+  `→ done`), keeps the frontmatter `status:` and the visible `## Status` block in sync, adds the
+  timestamped note, and commits to `main`. Agents run the script rather than hand-editing
+  frontmatter or interpreting prose; the `/set-status` command is a thin wrapper around it.
+  Authoring the initial status is `/refine`'s job; the `done` finalization is `/ship`'s.
 - "The human" means the person running the workflow (the repo owner) — never an agent.
 - Code review happens *during* `in-progress`; the story stays there through the fix rounds.
 - The implementer flips to `under-review` only when review is settled, to hand off to QA.
 - Each stage advances only the value it owns. **Only the human sets `done`,** by merging —
-  no agent ever merges or sets `done` on its own.
+  no agent ever merges or sets `done` on its own, and `set-status` refuses `→ done`.
 
 ## Estimate discipline
 Every story must be ≈4 days of human effort or less. If you can't justify that, the story is

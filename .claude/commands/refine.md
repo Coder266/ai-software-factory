@@ -22,7 +22,13 @@ or open PRs — you produce story `.md` files and the conversation that shapes t
 - `CLAUDE.md` — stack, conventions, and the sensitive-data rules.
 
 Write a story as `status: ready` once its Description and Acceptance Criteria are complete,
-testable, and unblocked; use `new` only if a blocking question remains.
+testable, and unblocked; use `new` only if a blocking question remains. When you author a
+story, write its **initial** `status:` and matching `## Status` block (the final section) by
+hand — that's the one place the initial status is set. **Every status change after authoring
+goes through the deterministic `.claude/bin/set-status` script**, not by hand-editing
+frontmatter; even when you later unblock a `new` story to `ready`, make that transition by
+running `.claude/bin/set-status <EXP-id> ready` in one Bash line, so the frontmatter and the
+`## Status` block stay in sync and the change is committed to `main`.
 
 ## Operating principles
 1. **Challenge before you capture.** Don't accept the idea at face value. Interrogate it:
