@@ -65,20 +65,28 @@ order:
 position.
 
 ### The `## Status` block
-`## Status` is a visible mirror of the frontmatter `status:` field, kept in sync with it by
-the `.claude/bin/set-status` script (and finalized to `done` by `/ship`). It is the story's
-final section and reads:
+`## Status` is a visible, **append-only history** of the story's lifecycle, kept in sync with
+the frontmatter `status:` field by the `.claude/bin/set-status` script (and finalized to `done`
+by `/ship`). It is the story's final section. `/refine` seeds it with one line; every
+transition **appends** a new timestamped line, so the block reads newest-last and the full
+history is browseable on GitHub. The **last line always mirrors the current frontmatter
+`status:`**. It reads:
 
 ```markdown
 ## Status
 
-`<status>` — <short note describing the move> _(YYYY-MM-DD HH:MM)_
+`ready` — refined and unblocked _(2026-06-20 09:15)_
+`in-progress` — implementing _(2026-06-21 14:02)_
+`under-review` — code review settled, handed to QA _(2026-06-22 11:30)_
 ```
 
-- The backticked word matches the frontmatter `status:` exactly.
-- The note is a brief human description of the transition (e.g. `refined and unblocked`,
-  `implementing on story/<slug>`, `code review settled, handed to QA`).
+- Each line's backticked word is a status; the **last** line matches the frontmatter `status:`
+  exactly.
+- The note is a brief human description of that transition (e.g. `refined and unblocked`,
+  `implementing`, `code review settled, handed to QA`).
 - The timestamp is to the minute (`YYYY-MM-DD HH:MM`).
+- Lines are appended, never rewritten — the block is the story's status log. This mirrors how
+  `/ship` adds its `done` line on merge.
 
 **Status changes are made through the `.claude/bin/set-status` script, not by hand-editing
 frontmatter.** The script is the single executable source of truth for the lifecycle: agents

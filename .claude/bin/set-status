@@ -10,12 +10,25 @@
 # The legal transition table mirrors .claude/guidelines/story-format.md. This is
 # deterministic plumbing on purpose: no LLM re-derives the lifecycle.
 #
+# Branch safety: the story-doc commit must land on `main` regardless of which
+# branch is checked out, because this script is invoked both from `main` (the
+# orchestrator) AND from a `story/<slug>` code branch (the implementer/qa, which
+# create the code branch *then* flip status). To stay independent of the caller's
+# branch and working tree, the edit+commit+push happen in a throwaway git worktree
+# checked out on a freshly fetched `origin/main`. The caller's branch never gains a
+# commit and its working tree is never touched; only the single story-doc commit
+# lands on `origin/main`.
+#
 # Exit codes: 0 success; non-zero on usage error, rejected/refused transition,
 # or commit failure. On any rejection/refusal the story file is left UNCHANGED.
 #
 # Environment knobs (for testing):
-#   SET_STATUS_NO_COMMIT=1  — update the file but skip git commit/push.
-#   SET_STATUS_NO_PUSH=1    — commit to the current repo but skip `git push`.
+#   SET_STATUS_NO_COMMIT=1  — update the in-repo story file in place, skip the
+#                             worktree/commit/push entirely (no remote needed).
+#   SET_STATUS_NO_PUSH=1     — do the worktree edit+commit on a local `main`, but
+#                             skip the final `git push` (no remote needed; falls
+#                             back to the local `main` branch when `origin/main`
+#                             can't be fetched).
 
 set -euo pipefail
 
@@ -123,93 +136,151 @@ case "$target" in
   under-review) note="code review settled, handed to QA" ;;
 esac
 
-# --- atomically update the file ----------------------------------------------
-# A single awk pass writes a temp file, then we mv it into place (atomic on the
-# same filesystem). We update exactly two things:
+# --- the file transformation -------------------------------------------------
+# Apply the status edit to a story file IN PLACE, atomically. We update exactly
+# two things:
 #   1. the frontmatter `status:` line
-#   2. the `## Status` block: append the new timestamped line as its last line.
-# Nothing else (code, pr:, other frontmatter, other sections) is touched.
-tmp="$(mktemp "${story}.XXXXXX")"
-trap 'rm -f "$tmp"' EXIT
+#   2. the `## Status` block: append the new timestamped line as its last line
+#      (preserving the prior history lines).
+# Nothing else (code, pr:, other frontmatter, other sections) is touched. The
+# `## QA` section, if present, stays directly above `## Status`. Exits non-zero
+# (leaving the source untouched) if the result's frontmatter isn't the target.
+transform_story() {
+  local src="$1" tmp
+  tmp="$(mktemp "${src}.XXXXXX")"
 
-awk -v target="$target" -v ts="$ts" -v note="$note" '
-  function flush_status() {
-    # emit the accumulated ## Status block, trimming trailing blanks, then the
-    # new status line.
-    end = status_n
-    while (end > 0 && status[end] ~ /^[[:space:]]*$/) end--
-    for (i = 1; i <= end; i++) print status[i]
-    print "`" target "` — " note " _(" ts ")_"
-    in_status = 0
-    status_n = 0
-  }
-  BEGIN { infm=0; fm_done=0; in_status=0; status_n=0; status_seen=0 }
-
-  # --- frontmatter handling ---
-  NR==1 && $0=="---" { infm=1; print; next }
-  infm && $0=="---" { infm=0; fm_done=1; print; next }
-  infm && /^status:[[:space:]]*/ { print "status: " target; next }
-  infm { print; next }
-
-  # --- ## Status section accumulation ---
-  in_status && /^## / {
-    # another heading after ## Status (should not normally happen since Status is
-    # last) — flush what we have and fall through to print this heading.
-    flush_status()
-  }
-  in_status {
-    status[++status_n] = $0
-    next
-  }
-  /^## Status[[:space:]]*$/ {
-    in_status = 1
-    status_seen = 1
-    print
-    next
-  }
-
-  { print }
-
-  END {
-    if (in_status) flush_status()
-    else if (!status_seen) {
-      # No ## Status section existed — create one as the final section.
-      print ""
-      print "## Status"
-      print ""
+  awk -v target="$target" -v ts="$ts" -v note="$note" '
+    function flush_status() {
+      # emit the accumulated ## Status block, trimming trailing blanks, then the
+      # new status line.
+      end = status_n
+      while (end > 0 && status[end] ~ /^[[:space:]]*$/) end--
+      for (i = 1; i <= end; i++) print status[i]
       print "`" target "` — " note " _(" ts ")_"
+      in_status = 0
+      status_n = 0
     }
-  }
-' "$story" > "$tmp"
+    BEGIN { infm=0; fm_done=0; in_status=0; status_n=0; status_seen=0 }
 
-# sanity: the new frontmatter status must be the target
-new_fm="$(awk '
-  NR==1 && $0=="---" { infm=1; next }
-  infm && $0=="---" { exit }
-  infm && /^status:[[:space:]]*/ { sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]+$/,""); print; exit }
-' "$tmp")"
-[ "$new_fm" = "$target" ] || die "internal error: frontmatter not updated to '$target'"
+    # --- frontmatter handling ---
+    NR==1 && $0=="---" { infm=1; print; next }
+    infm && $0=="---" { infm=0; fm_done=1; print; next }
+    infm && /^status:[[:space:]]*/ { print "status: " target; next }
+    infm { print; next }
 
-mv "$tmp" "$story"
-trap - EXIT
+    # --- ## Status section accumulation ---
+    in_status && /^## / {
+      # another heading after ## Status (should not normally happen since Status
+      # is last) — flush what we have and fall through to print this heading.
+      flush_status()
+    }
+    in_status {
+      status[++status_n] = $0
+      next
+    }
+    /^## Status[[:space:]]*$/ {
+      in_status = 1
+      status_seen = 1
+      print
+      next
+    }
 
-# --- commit (and push) to main ----------------------------------------------
+    { print }
+
+    END {
+      if (in_status) flush_status()
+      else if (!status_seen) {
+        # No ## Status section existed — create one as the final section.
+        print ""
+        print "## Status"
+        print ""
+        print "`" target "` — " note " _(" ts ")_"
+      }
+    }
+  ' "$src" > "$tmp"
+
+  # sanity: the new frontmatter status must be the target
+  local new_fm
+  new_fm="$(awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---" { exit }
+    infm && /^status:[[:space:]]*/ { sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]+$/,""); print; exit }
+  ' "$tmp")"
+  if [ "$new_fm" != "$target" ]; then
+    rm -f "$tmp"
+    die "internal error: frontmatter not updated to '$target'"
+  fi
+
+  mv "$tmp" "$src"
+}
+
 msg="$id: set status $target
 
 Generated with Claude Opus 4.8"
 
+# --- NO_COMMIT: edit the in-repo file in place, skip git entirely -------------
+# This path mutates the caller's working tree on purpose (tests assert on it) and
+# needs no remote. It is NOT used in normal operation.
 if [ "${SET_STATUS_NO_COMMIT:-}" = "1" ]; then
+  transform_story "$story"
   printf '%s: %s -> %s in %s (file updated, commit skipped)\n' "$prog" "$current" "$target" "$story"
   exit 0
 fi
 
-git commit -q "$story" -m "$msg" || die "git commit failed for $story"
+# --- commit (and push) to main via a throwaway worktree ----------------------
+# Do the edit+commit on a fresh `main` in an isolated worktree, so neither the
+# caller's branch nor its working tree is touched and only the story-doc commit
+# lands on `main`. We fetch origin/main when a remote exists; otherwise (e.g. in
+# NO_PUSH tests with no remote) we fall back to the local `main` branch.
+wt=""
+cleanup() { [ -n "$wt" ] && git worktree remove "$wt" --force >/dev/null 2>&1; }
+trap cleanup EXIT
+
+base=""
+if git remote get-url origin >/dev/null 2>&1 && git fetch -q origin main 2>/dev/null; then
+  base="origin/main"
+elif git show-ref --verify --quiet refs/heads/main; then
+  base="main"
+else
+  die "cannot resolve a 'main' to commit onto (no fetchable origin/main and no local main branch)"
+fi
+
+wt="$(mktemp -d)"
+git worktree add -q --detach "$wt" "$base" \
+  || die "could not create worktree on $base"
+
+# Locate the story in the freshly-checked-out main (it may live at a different
+# path than the caller's working copy, though normally it's the same).
+mapfile -t wt_matches < <(find "$wt/backlog" -type f -name "${id}-*.md" 2>/dev/null)
+case "${#wt_matches[@]}" in
+  0) die "story '$id' not found under backlog/ on $base" ;;
+  1) wt_story="${wt_matches[0]}" ;;
+  *) die "ambiguous: multiple story files match '$id' on $base: ${wt_matches[*]}" ;;
+esac
+
+# Re-validate against main's copy: act on the freshly-fetched content, not stale.
+wt_current="$(awk '
+  NR==1 && $0=="---" { infm=1; next }
+  infm && $0=="---" { exit }
+  infm && /^status:[[:space:]]*/ { sub(/^status:[[:space:]]*/,""); gsub(/[[:space:]]+$/,""); print; exit }
+' "$wt_story")"
+if [ "$wt_current" != "$current" ]; then
+  die "status on $base ('$wt_current') differs from the local working copy ('$current') for $id — refusing to act on stale content; re-sync and retry"
+fi
+
+transform_story "$wt_story"
+git -C "$wt" commit -q "$wt_story" -m "$msg" || die "git commit failed for $story on $base"
 
 if [ "${SET_STATUS_NO_PUSH:-}" = "1" ]; then
-  printf '%s: %s: %s -> %s (committed, push skipped)\n' "$prog" "$id" "$current" "$target"
+  # Land the commit on the local `main` branch so tests can inspect it without a
+  # remote. (With a detached worktree the commit is otherwise unreferenced.)
+  new_head="$(git -C "$wt" rev-parse HEAD)"
+  git update-ref refs/heads/main "$new_head" \
+    || die "could not advance local main to the new commit"
+  printf '%s: %s: %s -> %s (committed to main, push skipped)\n' "$prog" "$id" "$current" "$target"
   exit 0
 fi
 
-git push -q origin HEAD:main || die "git push to origin main failed"
+git -C "$wt" push -q origin HEAD:main || die "git push to origin main failed"
 
 printf '%s: %s: %s -> %s (committed and pushed to main)\n' "$prog" "$id" "$current" "$target"
