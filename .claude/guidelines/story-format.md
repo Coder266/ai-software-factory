@@ -4,6 +4,10 @@ Single source of truth for how backlog stories are written and how their status 
 `/refine` authors stories to this spec; the implementer, `/review`, `/qa`, and `/ship` all
 read and update them against it.
 
+Stories live inside an **epic** — the epic's own definition (`backlog/<epic>/epic.md`),
+frontmatter, sections, and `draft → in-progress → done → cancelled` status lifecycle are
+specified in `epic-format.md`.
+
 ## Location & naming
 - Path: `backlog/<epic-slug>/EXP-<id>-<story-slug>.md`
 - `<id>` = 6 random **uppercase**-alphanumeric chars

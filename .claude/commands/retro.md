@@ -15,6 +15,9 @@ Use the epic slug in `$ARGUMENTS`, or infer the most recently completed epic fro
 
 ## 2. Gather signal
 Pull from every place the human's intent showed up during this epic:
+- **The epic's `retro-notes.md`** (`backlog/<epic>/retro-notes.md`, if present) — the
+  orchestrator's captured **mid-epic human feedback** ("change now and save for retro"). This is
+  a first-class signal source: each note is a candidate durable rule. See `epic-format.md`.
 - **The epic's stories** under `backlog/<epic>/` — `## QA` history, how many comment→fix
   rounds each took, anything that bounced repeatedly.
 - **PR comments the human left** on the epic's PRs (`gh pr view <n> --comments`,

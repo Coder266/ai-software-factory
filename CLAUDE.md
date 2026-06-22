@@ -37,6 +37,8 @@ Each story flows through:
 Shared standards live in `.claude/guidelines/` so there's one place to change a rule. Each
 command and agent reads the subset relevant to it instead of restating it:
 
+- `epic-format.md` — epic definition (`backlog/<epic>/epic.md`), frontmatter, sections, the
+  `draft → in-progress → done → cancelled` status lifecycle, and the `retro-notes.md` convention.
 - `story-format.md` — story file location, frontmatter, sections, and the `status` lifecycle
   (`new → ready → in-progress → under-review → done`).
 - `code.md` — backend/frontend conventions, tests, running locally, sensitive data.
@@ -75,8 +77,12 @@ Rules:
   GitHub. They are never bundled into a `story/<slug>` code branch, so code PR diffs stay free
   of `backlog/` files. See `.claude/guidelines/commits-and-prs.md`.
 - Follow the sensitive-data rules above and the guideline files in `.claude/guidelines/`.
-- When every story in an epic has reached `done`, **offer to run `/retro`** so what you
-  learned during the epic gets folded back into the guidelines, agents, and commands.
+- When every story in an epic has reached `done` — i.e. the **epic reaches `status: done`**
+  (see `epic-format.md`) — **offer to run `/retro`** so what you learned during the epic gets
+  folded back into the guidelines, agents, and commands.
+- Capture **mid-epic human feedback** (corrections, "actually do it this way") into the epic's
+  `backlog/<epic>/retro-notes.md`, committed to `main` like the other backlog docs, so `/retro`
+  can fold it into durable rules later (see `epic-format.md`).
 
 ## Conventions
 - One story = one branch = one PR.

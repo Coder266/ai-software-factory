@@ -6,6 +6,7 @@ it, so there's one place to change a rule.
 
 | file | what it covers | used by |
 |------|----------------|---------|
+| `epic-format.md` | epic definition (`epic.md`), frontmatter, sections, `status` lifecycle, `retro-notes.md` convention | `/refine` (author); orchestrator, `/factory`, `/retro` (read) |
 | `story-format.md` | story file location, frontmatter, sections, `status` lifecycle | `/refine` (author); implementer, `/review`, `/qa`, `/ship` (read) |
 | `code.md` | backend/frontend conventions, tests, running locally, sensitive data | implementer; `/qa` |
 | `commits-and-prs.md` | branch + commit + PR conventions, attribution, merging | implementer; `/ship` |
