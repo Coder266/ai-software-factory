@@ -28,3 +28,9 @@ rules in the guidelines/agents/commands.
   proposals and **voice disagreement**, not just capture what it's told. The persona already says
   "challenge before you capture" — make explicit, vocal pushback a stated expectation.
   _Source: human, 2026-06-21._
+
+- **Estimate discipline is in hours, not days.** The "≈4 days of human effort or less" ceiling
+  in `story-format.md` was a slip — the human meant **≈4 hours**. Stories should be sized to a
+  few hours of human effort. Fold the corrected unit into `story-format.md`'s "Estimate
+  discipline" section (and reword the `estimate:` examples accordingly, e.g. `2d` → `2h`).
+  _Source: human, 2026-06-22._
